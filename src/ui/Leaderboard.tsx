@@ -47,7 +47,17 @@ export function Leaderboard({ standings, currentLap, events }: LeaderboardProps)
             }
           >
             <span>{row.position}</span>
-            <span>{row.car.driver.name}</span>
+            <span>
+              {row.car.driver.name}
+              {row.car.damageSeverity && (
+                <span
+                  className={`damage-indicator damage-indicator--${row.car.damageSeverity}`}
+                  title={row.car.damageLabel}
+                >
+                  ⚠
+                </span>
+              )}
+            </span>
             <span>{row.car.team.name}</span>
             <span>
               <TireBadge compound={row.car.currentCompound} tireAge={row.car.tireAge} />

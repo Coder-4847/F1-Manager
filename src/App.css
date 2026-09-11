@@ -350,6 +350,110 @@
   }
 }
 
+/* Damage alert modal */
+
+.damage-alert {
+  max-width: 440px;
+  text-align: center;
+}
+
+.damage-alert__badge {
+  display: inline-block;
+  font-family: var(--heading);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  margin-bottom: 0.75rem;
+}
+
+.damage-alert__badge--minor {
+  background: var(--yellow-dim);
+  color: var(--yellow);
+}
+
+.damage-alert__badge--major {
+  background: rgba(255, 138, 0, 0.16);
+  color: #ff8a00;
+}
+
+.damage-alert__badge--mechanical {
+  background: var(--red-dim);
+  color: var(--red);
+  box-shadow: 0 0 14px var(--red-glow);
+}
+
+.damage-alert h2 {
+  margin-bottom: 0.6rem;
+}
+
+.damage-alert__desc {
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 150%;
+  margin-bottom: 1.25rem;
+}
+
+.damage-alert__desc strong {
+  color: var(--text-h);
+}
+
+.damage-alert__actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+.damage-alert__pit {
+  background: var(--red);
+  border-color: var(--red);
+  color: var(--on-accent);
+  box-shadow: 0 0 14px var(--red-glow);
+}
+
+.damage-alert__pit:hover:not(:disabled) {
+  background: #ff1a12;
+}
+
+/* Damage indicators elsewhere */
+
+.damage-indicator {
+  margin-left: 0.3rem;
+  font-size: 0.75rem;
+  cursor: default;
+}
+
+.damage-indicator--minor {
+  color: var(--yellow);
+}
+
+.damage-indicator--major {
+  color: #ff8a00;
+}
+
+.damage-indicator--mechanical {
+  color: var(--red);
+}
+
+.damage-status {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.damage-status--minor {
+  color: var(--yellow);
+}
+
+.damage-status--major {
+  color: #ff8a00;
+}
+
+.damage-status--mechanical {
+  color: var(--red);
+}
+
 /* Buttons */
 
 button {

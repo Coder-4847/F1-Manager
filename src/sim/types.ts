@@ -71,6 +71,8 @@ export interface PitStopPlan {
   compound: TireCompound;
 }
 
+export type DamageSeverity = "minor" | "major" | "mechanical";
+
 export interface CarState {
   driver: Driver;
   team: Team;
@@ -89,10 +91,17 @@ export interface CarState {
   finished: boolean;
   /** Lap time history, index 0 = lap 1. */
   lapTimes: number[];
+  /** Seconds added to every lap from unrepaired damage (0 = none). Cleared by any pit stop. */
+  damagePenaltySeconds: number;
+  /** Extra pit time (seconds), on top of the normal stop, needed to fix current damage. Undefined when there's no active damage. */
+  pendingRepairSeconds?: number;
+  /** Human-readable label for the active damage (e.g. "Suspension damage"). Undefined when there's no active damage. */
+  damageLabel?: string;
+  damageSeverity?: DamageSeverity;
 }
 
 export interface LapEvent {
-  type: "pit-stop" | "overtake";
+  type: "pit-stop" | "overtake" | "damage";
   lap: number;
   driverId: string;
   message: string;

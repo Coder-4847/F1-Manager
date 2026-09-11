@@ -4,6 +4,7 @@ import { calculateLapTime } from "./lapTime";
 import { pitStopTimeLoss } from "./pitStop";
 import { decideAIAction, generateAIStrategy } from "./strategy";
 import { resolveOvertakeAttempt } from "./overtaking";
+import { applyDamage, clearDamage, rollForDamage } from "./damage";
 import { drivers, getTeam } from "./roster";
 
 export interface RaceSetup {
@@ -29,6 +30,7 @@ function createCarState(driver: Driver, isPlayer: boolean, strategy: InitialStra
     isPlayer,
     finished: false,
     lapTimes: [],
+    damagePenaltySeconds: 0,
   };
 }
 
@@ -67,6 +69,7 @@ interface LapCompute {
   rawLapTime: number;
   duePitStop?: PitStopPlan;
   pitLoss?: number;
+  repaired?: boolean;
 }
 
 /** Advances every car by exactly one lap, mutating and returning the same RaceState. */
@@ -87,6 +90,17 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
 
   for (const car of state.cars) {
     if (car.finished) continue;
+
+    const damageEvent = rollForDamage(car, random);
+    if (damageEvent) {
+      applyDamage(car, damageEvent);
+      lapEvents.push({
+        type: "damage",
+        lap: state.currentLap,
+        driverId: car.driver.id,
+        message: `${car.driver.name} suffers ${damageEvent.label.toLowerCase()}!`,
+      });
+    }
 
     if (!car.isPlayer) {
       const idx = orderBefore.indexOf(car.driver.id);
@@ -115,9 +129,12 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
       car.pitPlan[0]?.lap === state.currentLap ? car.pitPlan.shift() : undefined;
 
     const rawLapTime = calculateLapTime(car, state.track, random);
-    const pitLoss = duePitStop ? pitStopTimeLoss(state.track, random) : undefined;
+    const repaired = Boolean(duePitStop && car.pendingRepairSeconds !== undefined);
+    const pitLoss = duePitStop
+      ? pitStopTimeLoss(state.track, random) + (repaired ? car.pendingRepairSeconds! : 0)
+      : undefined;
 
-    computed.set(car.driver.id, { car, rawLapTime, duePitStop, pitLoss });
+    computed.set(car.driver.id, { car, rawLapTime, duePitStop, pitLoss, repaired });
   }
 
   // Phase B: resolve battles in track-position order (leader first) so a fresh
@@ -128,7 +145,7 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
     const entry = computed.get(driverId);
     if (!entry) return; // already finished before this lap
 
-    const { car, rawLapTime, duePitStop, pitLoss } = entry;
+    const { car, rawLapTime, duePitStop, pitLoss, repaired } = entry;
     const preTotal = preLap.get(driverId)!.totalTime;
     const naiveTotal = preTotal + rawLapTime + (pitLoss ?? 0);
 
@@ -174,11 +191,14 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
       car.currentCompound = duePitStop.compound;
       car.tireAge = 0;
       car.pitStopsMade += 1;
+      if (repaired) clearDamage(car);
       lapEvents.push({
         type: "pit-stop",
         lap: state.currentLap,
         driverId,
-        message: `${car.driver.name} pits for ${duePitStop.compound} tires (+${(pitLoss ?? 0).toFixed(1)}s)`,
+        message: repaired
+          ? `${car.driver.name} pits for ${duePitStop.compound} tires and repairs damage (+${(pitLoss ?? 0).toFixed(1)}s)`
+          : `${car.driver.name} pits for ${duePitStop.compound} tires (+${(pitLoss ?? 0).toFixed(1)}s)`,
       });
     }
 

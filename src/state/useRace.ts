@@ -40,21 +40,32 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
   const intervalRef = useRef<number | null>(null);
 
+  // True right after the player's car picks up new damage this lap — playback
+  // pauses and stays paused until the player resolves it (pit or push through).
+  const [damageAlert, setDamageAlert] = useState(false);
+
   const step = useCallback(() => {
     setRaceState((prev) => {
       if (prev.finished) return prev;
       simulateLap(prev);
+      const gotDamaged = prev.events.some(
+        (e) => e.type === "damage" && e.lap === prev.currentLap && e.driverId === playerDriverId
+      );
+      if (gotDamaged) {
+        setPlaying(false);
+        setDamageAlert(true);
+      }
       return { ...prev };
     });
-  }, []);
+  }, [playerDriverId]);
 
   useEffect(() => {
-    if (!playing) return;
+    if (!playing || damageAlert) return;
     intervalRef.current = window.setInterval(step, TICK_MS_BY_SPEED[speed]);
     return () => {
       if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
     };
-  }, [playing, speed, step]);
+  }, [playing, speed, step, damageAlert]);
 
   useEffect(() => {
     if (raceState.finished) setPlaying(false);
@@ -65,12 +76,14 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
 
   const reset = useCallback(() => {
     setPlaying(false);
+    setDamageAlert(false);
     setRaceState((prev) => setupRace({ track: prev.track, playerDriverId, playerStrategy }));
   }, [playerDriverId, playerStrategy]);
 
   const switchTrack = useCallback(
     (track: Track) => {
       setPlaying(false);
+      setDamageAlert(false);
       setRaceState(setupRace({ track, playerDriverId, playerStrategy }));
     },
     [playerDriverId, playerStrategy]
@@ -79,6 +92,7 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
   /** Replaces the race state outright — used when loading a saved season/race. */
   const restoreRaceState = useCallback((state: RaceState) => {
     setPlaying(false);
+    setDamageAlert(false);
     setRaceState(state);
   }, []);
 
@@ -103,6 +117,18 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
     });
   }, []);
 
+  /** Resolves a pending damage alert: pit next lap (repairs on arrival) or push through unrepaired. */
+  const resolveDamage = useCallback((choice: "pit" | "push") => {
+    if (choice === "pit") {
+      setRaceState((prev) => {
+        const car = prev.cars.find((c) => c.isPlayer);
+        if (car) queuePlayerPitStop(prev, prev.currentLap + 1, car.currentCompound);
+        return { ...prev };
+      });
+    }
+    setDamageAlert(false);
+  }, []);
+
   const playerCar = raceState.cars.find((c) => c.isPlayer);
   const standings = getStandings(raceState);
 
@@ -113,6 +139,7 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
     playing,
     speed,
     tickDurationMs: TICK_MS_BY_SPEED[speed],
+    damageAlert,
     setSpeed,
     play,
     pause,
@@ -123,5 +150,6 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
     setDrivingMode,
     queuePitStop,
     cancelPitStop,
+    resolveDamage,
   };
 }

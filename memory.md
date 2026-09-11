@@ -197,6 +197,41 @@ src/
     Bumped the season-save localStorage key to `f1-manager-save-v3` since
     the `calendar` schema changed shape and an old `v2` save would otherwise
     load malformed data and crash.
+13. **Damage & mechanical failures** — new `sim/damage.ts`: every car rolls a
+    small independent chance each lap (`rollForDamage`, ~1.2% base, scaled
+    0.7x-1.3x by the driver's aggression stat) of picking up damage, split
+    minor/major/mechanical (70/25/5%, so mechanical is rare — roughly a
+    3-4% chance across a full ~55-lap race per car). Active damage adds a
+    flat seconds-per-lap penalty (`CarState.damagePenaltySeconds`, folded
+    into `lapTime.ts`'s total) that persists until repaired; any pit stop
+    (not just a dedicated "repair" stop) clears it and adds the damage's
+    `pendingRepairSeconds` on top of the normal pit loss — see `clearDamage`/
+    `applyDamage` in `damage.ts` and the `repaired` flag threaded through
+    `raceEngine.ts`'s `LapCompute`. AI cars react through `decideAIAction`
+    (`strategy.ts`): major/mechanical damage forces an immediate same-lap
+    pit regardless of tire wear, minor damage just lowers the pit-wear
+    threshold so they come in a bit sooner. The player instead gets a
+    blocking `DamageAlert` modal (`ui/DamageAlert.tsx`): `useRace.ts` checks
+    after every simulated lap for a new "damage" event belonging to the
+    player, and if found pauses (`setPlaying(false)`) and sets `damageAlert`
+    true, which also disables Play/Step in `PlaybackControls` (via a new
+    `blocked` prop) until resolved. "Pit for Repairs" queues a next-lap stop
+    on the player's current compound (`resolveDamage("pit")` ->
+    `queuePlayerPitStop`); "Push Through" just dismisses the modal and the
+    penalty keeps applying until the player pits some other way. Active
+    damage also shows as a small ⚠ badge next to the driver's name in
+    `Leaderboard.tsx` and as a status line in `PlayerControls.tsx`, and
+    damage/repair events get a 💥 icon in `EventFeed.tsx`. Deliberately
+    **not** implemented: retirement/DNF — a mechanical failure is a severe,
+    long-lasting performance penalty, not a race-ending one, since properly
+    modeling a retired car (removing it from the running order while still
+    showing it in standings) would be a much larger change to the engine
+    than this feature asked for. Verified in-browser with a custom 100-lap
+    single-track season at 4x speed: saw AI cars get hit and react (both
+    same-lap forced pits for major damage and deferred pits for minor), the
+    player get hit with a blocking popup, both "Push Through" and "Pit for
+    Repairs" paths, and the damage indicator appearing/clearing correctly —
+    then ran the race to completion with no errors.
 
 ## A real bug that was found and fixed (worth knowing about)
 

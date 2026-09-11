@@ -48,7 +48,14 @@ export function calculateLapTime(car: CarState, track: Track, random: () => numb
   const noise = (random() - 0.5) * 2 * noiseAmplitude;
 
   const lapTime =
-    track.baseLapTimeSeconds + pacePenalty + compoundDelta + wearPenalty + fuelPenalty + modeDelta + noise;
+    track.baseLapTimeSeconds +
+    pacePenalty +
+    compoundDelta +
+    wearPenalty +
+    fuelPenalty +
+    modeDelta +
+    noise +
+    car.damagePenaltySeconds;
 
   return Math.max(lapTime, track.baseLapTimeSeconds * 0.5);
 }

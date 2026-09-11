@@ -78,8 +78,15 @@ export function decideAIAction(car: CarState, ctx: AIDecisionContext, random: ()
 
   threshold = Math.max(55, Math.min(92, threshold));
 
+  // Damage changes the calculus: major/mechanical damage is urgent enough to pit
+  // immediately regardless of tire life, and even minor damage nudges the car
+  // toward pitting sooner than tire wear alone would call for.
+  const urgentDamage = car.damageSeverity === "major" || car.damageSeverity === "mechanical";
+  if (car.damageSeverity === "minor") threshold -= 15;
+
   const lateRaceGuard = lapsRemaining <= 4 && wearPct < 92;
-  const shouldPit = car.tireAge >= MIN_STINT_LAPS && !lateRaceGuard && wearPct >= threshold;
+  const shouldPit =
+    urgentDamage || (car.tireAge >= MIN_STINT_LAPS && !lateRaceGuard && wearPct >= threshold);
 
   let pitCompound: TireCompound | undefined;
   if (shouldPit) {

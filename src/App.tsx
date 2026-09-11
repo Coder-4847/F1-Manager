@@ -12,6 +12,7 @@ import { LiveTrackView } from "./ui/LiveTrackView";
 import { SeasonStandings } from "./ui/SeasonStandings";
 import { DriverProfile } from "./ui/DriverProfile";
 import { SeasonSetup } from "./ui/SeasonSetup";
+import { DamageAlert } from "./ui/DamageAlert";
 import type { InitialStrategy } from "./sim/strategy";
 import type { SeasonRound } from "./sim/season";
 
@@ -48,6 +49,7 @@ function App() {
     playing,
     speed,
     tickDurationMs,
+    damageAlert,
     setSpeed,
     play,
     pause,
@@ -56,6 +58,7 @@ function App() {
     setDrivingMode,
     queuePitStop,
     cancelPitStop,
+    resolveDamage,
   } = race;
 
   const [showProfileEditor, setShowProfileEditor] = useState(false);
@@ -122,6 +125,14 @@ function App() {
         />
       )}
 
+      {damageAlert && playerCar && (
+        <DamageAlert
+          car={playerCar}
+          onPit={() => resolveDamage("pit")}
+          onPush={() => resolveDamage("push")}
+        />
+      )}
+
       <PlaybackControls
         currentLap={raceState.currentLap}
         totalLaps={track.totalLaps}
@@ -130,6 +141,7 @@ function App() {
         seasonComplete={seasonComplete}
         speed={speed}
         hasSave={hasSave}
+        blocked={damageAlert}
         onPlay={play}
         onPause={pause}
         onStep={step}

@@ -10,6 +10,8 @@ export interface PlaybackControlsProps {
   seasonComplete: boolean;
   speed: PlaybackSpeed;
   hasSave: boolean;
+  /** True while a blocking decision (e.g. a damage alert) needs the player's input before the race can continue. */
+  blocked?: boolean;
   onPlay: () => void;
   onPause: () => void;
   onStep: () => void;
@@ -28,6 +30,7 @@ export function PlaybackControls({
   seasonComplete,
   speed,
   hasSave,
+  blocked,
   onPlay,
   onPause,
   onStep,
@@ -46,9 +49,11 @@ export function PlaybackControls({
         {!finished && (playing ? (
           <button onClick={onPause}>Pause</button>
         ) : (
-          <button onClick={onPlay}>Play</button>
+          <button onClick={onPlay} disabled={blocked}>
+            Play
+          </button>
         ))}
-        <button onClick={onStep} disabled={playing || finished}>
+        <button onClick={onStep} disabled={playing || finished || blocked}>
           Step
         </button>
         <button onClick={onReset}>Reset</button>

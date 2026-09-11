@@ -30,6 +30,15 @@ export function PlayerControls({
         <TireBadge compound={car.currentCompound} tireAge={car.tireAge} />
       </div>
 
+      {car.damageSeverity && (
+        <div className="player-controls__row">
+          <div className="player-controls__label">Damage</div>
+          <div className={`damage-status damage-status--${car.damageSeverity}`}>
+            {car.damageLabel} &middot; -{car.damagePenaltySeconds.toFixed(1)}s/lap
+          </div>
+        </div>
+      )}
+
       <div className="player-controls__row">
         <div className="player-controls__label">Driving mode</div>
         <div className="segmented">
