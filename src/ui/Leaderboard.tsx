@@ -1,4 +1,6 @@
+import { motion } from "framer-motion";
 import type { StandingsRow } from "../sim/raceEngine";
+import type { LapEvent } from "../sim/types";
 import { TireBadge } from "./TireBadge";
 
 function formatGap(seconds: number, position: number): string {
@@ -6,39 +8,56 @@ function formatGap(seconds: number, position: number): string {
   return `+${seconds.toFixed(1)}s`;
 }
 
-export function Leaderboard({ standings }: { standings: StandingsRow[] }) {
+export interface LeaderboardProps {
+  standings: StandingsRow[];
+  currentLap: number;
+  events: LapEvent[];
+}
+
+export function Leaderboard({ standings, currentLap, events }: LeaderboardProps) {
+  const justPittedIds = new Set(
+    events.filter((e) => e.type === "pit-stop" && e.lap === currentLap).map((e) => e.driverId)
+  );
+
   return (
-    <table className="leaderboard">
-      <thead>
-        <tr>
-          <th>Pos</th>
-          <th>Driver</th>
-          <th>Team</th>
-          <th>Tires</th>
-          <th>Gap</th>
-          <th>Interval</th>
-          <th>Stops</th>
-        </tr>
-      </thead>
-      <tbody>
-        {standings.map((row, i) => {
-          const ahead = standings[i - 1];
-          const interval = ahead ? row.car.totalTimeSeconds - ahead.car.totalTimeSeconds : 0;
-          return (
-            <tr key={row.car.driver.id} className={row.car.isPlayer ? "player-row" : ""}>
-              <td>{row.position}</td>
-              <td>{row.car.driver.name}</td>
-              <td>{row.car.team.name}</td>
-              <td>
-                <TireBadge compound={row.car.currentCompound} tireAge={row.car.tireAge} />
-              </td>
-              <td>{formatGap(row.gapToLeaderSeconds, row.position)}</td>
-              <td>{row.position === 1 ? "—" : `+${interval.toFixed(1)}s`}</td>
-              <td>{row.car.pitStopsMade}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <div className="leaderboard" role="table">
+      <div className="leaderboard__row leaderboard__row--head" role="row">
+        <span>Pos</span>
+        <span>Driver</span>
+        <span>Team</span>
+        <span>Tires</span>
+        <span>Gap</span>
+        <span>Interval</span>
+        <span>Stops</span>
+      </div>
+      {standings.map((row, i) => {
+        const ahead = standings[i - 1];
+        const interval = ahead ? row.car.totalTimeSeconds - ahead.car.totalTimeSeconds : 0;
+        const justPitted = justPittedIds.has(row.car.driver.id);
+        return (
+          <motion.div
+            key={row.car.driver.id}
+            layout
+            transition={{ type: "spring", stiffness: 400, damping: 32 }}
+            role="row"
+            className={
+              "leaderboard__row" +
+              (row.car.isPlayer ? " player-row" : "") +
+              (justPitted ? " leaderboard__row--pit-flash" : "")
+            }
+          >
+            <span>{row.position}</span>
+            <span>{row.car.driver.name}</span>
+            <span>{row.car.team.name}</span>
+            <span>
+              <TireBadge compound={row.car.currentCompound} tireAge={row.car.tireAge} />
+            </span>
+            <span>{formatGap(row.gapToLeaderSeconds, row.position)}</span>
+            <span>{row.position === 1 ? "—" : `+${interval.toFixed(1)}s`}</span>
+            <span>{row.car.pitStopsMade}</span>
+          </motion.div>
+        );
+      })}
+    </div>
   );
 }

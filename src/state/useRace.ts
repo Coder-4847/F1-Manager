@@ -9,6 +9,8 @@ import {
 } from "../sim/raceEngine";
 import type { DrivingMode, RaceState, TireCompound, Track } from "../sim/types";
 import type { InitialStrategy } from "../sim/strategy";
+import { getTrack } from "../sim/tracks";
+import { hasSavedRaceState, loadRaceState, saveRaceState } from "./persistence";
 
 export type PlaybackSpeed = 0.5 | 1 | 2 | 4;
 
@@ -20,14 +22,19 @@ const TICK_MS_BY_SPEED: Record<PlaybackSpeed, number> = {
 };
 
 export interface UseRaceOptions {
-  track: Track;
+  initialTrack: Track;
   playerDriverId: string;
   playerStrategy: InitialStrategy;
 }
 
-export function useRace({ track, playerDriverId, playerStrategy }: UseRaceOptions) {
+/**
+ * Owns the currently selected track itself (rather than taking it as a
+ * reactive prop) so a loaded save's track and a manual track switch both
+ * flow through the same single source of truth: raceState.track.
+ */
+export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRaceOptions) {
   const [raceState, setRaceState] = useState<RaceState>(() =>
-    setupRace({ track, playerDriverId, playerStrategy })
+    setupRace({ track: initialTrack, playerDriverId, playerStrategy })
   );
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
@@ -58,8 +65,31 @@ export function useRace({ track, playerDriverId, playerStrategy }: UseRaceOption
 
   const reset = useCallback(() => {
     setPlaying(false);
-    setRaceState(setupRace({ track, playerDriverId, playerStrategy }));
-  }, [track, playerDriverId, playerStrategy]);
+    setRaceState((prev) => setupRace({ track: prev.track, playerDriverId, playerStrategy }));
+  }, [playerDriverId, playerStrategy]);
+
+  const switchTrack = useCallback(
+    (trackId: string) => {
+      setPlaying(false);
+      setRaceState(setupRace({ track: getTrack(trackId), playerDriverId, playerStrategy }));
+    },
+    [playerDriverId, playerStrategy]
+  );
+
+  const [hasSave, setHasSave] = useState(() => hasSavedRaceState());
+
+  const save = useCallback(() => {
+    saveRaceState(raceState);
+    setHasSave(true);
+  }, [raceState]);
+
+  const load = useCallback(() => {
+    const loaded = loadRaceState();
+    if (loaded) {
+      setPlaying(false);
+      setRaceState(loaded);
+    }
+  }, []);
 
   const setDrivingMode = useCallback((mode: DrivingMode) => {
     setRaceState((prev) => {
@@ -96,6 +126,10 @@ export function useRace({ track, playerDriverId, playerStrategy }: UseRaceOption
     pause,
     step,
     reset,
+    switchTrack,
+    hasSave,
+    save,
+    load,
     setDrivingMode,
     queuePitStop,
     cancelPitStop,

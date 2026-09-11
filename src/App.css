@@ -11,7 +11,17 @@
 
 .subtitle {
   color: var(--text);
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.track-selector {
+  font: inherit;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--border);
+  background: var(--panel-bg);
+  color: var(--text-h);
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
 }
 
 button {
@@ -140,22 +150,45 @@ h2 {
 
 /* Leaderboard */
 
-table.leaderboard {
+.leaderboard {
   width: 100%;
-  border-collapse: collapse;
+  display: flex;
+  flex-direction: column;
 }
 
-.leaderboard th,
-.leaderboard td {
-  text-align: left;
+.leaderboard__row {
+  display: grid;
+  grid-template-columns: 2.5rem 1.4fr 1.4fr 5.5rem 4.5rem 4.5rem 3.5rem;
+  align-items: center;
+  gap: 0.4rem;
   padding: 0.45rem 0.6rem;
   border-bottom: 1px solid var(--border);
   font-variant-numeric: tabular-nums;
 }
 
+.leaderboard__row--head {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+
 .player-row {
   font-weight: 700;
   color: var(--accent);
+}
+
+@keyframes pit-flash {
+  0% {
+    background: color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.leaderboard__row--pit-flash {
+  animation: pit-flash 1.4s ease-out;
 }
 
 /* Tire badge */

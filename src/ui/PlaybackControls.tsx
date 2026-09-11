@@ -8,11 +8,14 @@ export interface PlaybackControlsProps {
   playing: boolean;
   finished: boolean;
   speed: PlaybackSpeed;
+  hasSave: boolean;
   onPlay: () => void;
   onPause: () => void;
   onStep: () => void;
   onReset: () => void;
   onSetSpeed: (speed: PlaybackSpeed) => void;
+  onSave: () => void;
+  onLoad: () => void;
 }
 
 export function PlaybackControls({
@@ -21,11 +24,14 @@ export function PlaybackControls({
   playing,
   finished,
   speed,
+  hasSave,
   onPlay,
   onPause,
   onStep,
   onReset,
   onSetSpeed,
+  onSave,
+  onLoad,
 }: PlaybackControlsProps) {
   return (
     <div className="playback-controls">
@@ -53,6 +59,12 @@ export function PlaybackControls({
             </button>
           ))}
         </div>
+        <button onClick={onSave} title="Save progress to this browser">
+          Save
+        </button>
+        <button onClick={onLoad} disabled={!hasSave} title="Load your last saved race">
+          Load
+        </button>
       </div>
       {finished && <div className="playback-controls__finished">Race finished</div>}
     </div>

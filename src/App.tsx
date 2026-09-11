@@ -7,6 +7,7 @@ import { EventFeed } from "./ui/EventFeed";
 import { PlayerControls } from "./ui/PlayerControls";
 import { PlaybackControls } from "./ui/PlaybackControls";
 import { TrackPositionStrip } from "./ui/TrackPositionStrip";
+import { TrackSelector } from "./ui/TrackSelector";
 import type { InitialStrategy } from "./sim/strategy";
 
 const PLAYER_DRIVER_ID = "k-1"; // Ravi Chandran, Kestrel GP — solid midfield car/driver
@@ -28,35 +29,44 @@ function App() {
     pause,
     step,
     reset,
+    switchTrack,
+    hasSave,
+    save,
+    load,
     setDrivingMode,
     queuePitStop,
     cancelPitStop,
-  } = useRace({ track: monza, playerDriverId: PLAYER_DRIVER_ID, playerStrategy: PLAYER_STRATEGY });
+  } = useRace({ initialTrack: monza, playerDriverId: PLAYER_DRIVER_ID, playerStrategy: PLAYER_STRATEGY });
 
   const playerDriver = drivers.find((d) => d.id === PLAYER_DRIVER_ID)!;
   const playerStanding = standings.find((row) => row.car.isPlayer);
+  const track = raceState.track;
 
   return (
     <div className="app">
       <header className="app__header">
         <h1>F1 Manager</h1>
         <p className="subtitle">
-          {monza.name} &middot; {monza.totalLaps} laps &middot; managing{" "}
+          {track.name} &middot; {track.totalLaps} laps &middot; managing{" "}
           <strong>{playerDriver.name}</strong> ({getTeam(playerDriver.teamId).name})
         </p>
+        <TrackSelector selectedTrackId={track.id} onSelect={switchTrack} disabled={playing} />
       </header>
 
       <PlaybackControls
         currentLap={raceState.currentLap}
-        totalLaps={monza.totalLaps}
+        totalLaps={track.totalLaps}
         playing={playing}
         finished={raceState.finished}
         speed={speed}
+        hasSave={hasSave}
         onPlay={play}
         onPause={pause}
         onStep={step}
         onReset={reset}
         onSetSpeed={setSpeed}
+        onSave={save}
+        onLoad={load}
       />
 
       {playerStanding && (
@@ -71,7 +81,7 @@ function App() {
       <div className="layout">
         <section className="layout__main">
           <h2>Leaderboard</h2>
-          <Leaderboard standings={standings} />
+          <Leaderboard standings={standings} currentLap={raceState.currentLap} events={raceState.events} />
         </section>
 
         <aside className="layout__side">
