@@ -156,6 +156,24 @@ src/
    (no longer follows system light/dark — a deliberate brand choice).
 10. **Deployment** — GitHub Actions → GitHub Pages workflow, Vite base path
     fix for the project-site subpath.
+11. **Driver customization** — "Edit Driver" modal (`ui/DriverProfile.tsx`)
+    lets the player change their driver's name, age, car number, and
+    nationality. `Driver` gained optional `age`/`nationality`/`number`
+    fields (`sim/types.ts`); only the player driver (`k-1`) has them
+    populated in `roster.ts`. Edits are applied via
+    `updateDriverProfile()` in `roster.ts`, which `Object.assign`s the
+    roster driver object **in place** — deliberate, so every existing
+    reference to it (an in-progress race's `CarState.driver`, season
+    standings, event log messages) picks up the change on the next render
+    with zero changes to `useSeason`/`useRace`/`raceEngine`. Persisted to
+    its own localStorage key (`state/driverProfile.ts`,
+    `f1-manager-driver-profile-v1`, separate from the season save) and
+    reapplied once at module load in `App.tsx` (before `useSeason`'s
+    lazy initializer runs, so the very first race setup already sees any
+    saved edit). "Reset to Default" is backed by a snapshot of the
+    original roster values taken once at `roster.ts` module load, before
+    any edit can mutate them — `getDefaultProfile()` reads from that
+    snapshot, not from the (possibly-mutated) live roster.
 
 ## A real bug that was found and fixed (worth knowing about)
 
