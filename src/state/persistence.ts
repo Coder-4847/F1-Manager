@@ -1,9 +1,11 @@
 import type { RaceState } from "../sim/types";
 import type { SeasonState } from "../sim/season";
 
-// Bumped to v3 because SeasonState.calendar changed shape (string[] -> SeasonRound[])
-// for custom seasons — an old v2 save would otherwise load malformed data and crash.
-const SAVE_KEY = "f1-manager-save-v3";
+// Bumped to v4 because RaceState gained a `weather` field and CarState gained damage
+// fields that a pre-v4 save wouldn't have — loading one without this bump would leave
+// those fields undefined and propagate NaN through the lap time math. Also retroactively
+// covers the v3-era gap: the damage feature added CarState fields without its own bump.
+const SAVE_KEY = "f1-manager-save-v4";
 
 export interface SeasonSave {
   season: SeasonState;

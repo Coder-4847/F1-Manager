@@ -3,7 +3,14 @@ import type { CarState, DrivingMode, TireCompound } from "../sim/types";
 import { TireBadge } from "./TireBadge";
 
 const MODES: DrivingMode[] = ["conserve", "balanced", "push"];
-const COMPOUNDS: TireCompound[] = ["soft", "medium", "hard"];
+const COMPOUNDS: TireCompound[] = ["soft", "medium", "hard", "intermediate", "wet"];
+const COMPOUND_LABEL: Record<TireCompound, string> = {
+  soft: "Soft",
+  medium: "Medium",
+  hard: "Hard",
+  intermediate: "Inter",
+  wet: "Wet",
+};
 
 export interface PlayerControlsProps {
   car: CarState;
@@ -58,7 +65,7 @@ export function PlayerControls({
       <div className="player-controls__row">
         <div className="player-controls__label">Pit stop</div>
         <div className="pit-controls">
-          <div className="segmented">
+          <div className="segmented segmented--compounds">
             {COMPOUNDS.map((compound) => (
               <button
                 key={compound}
@@ -68,7 +75,7 @@ export function PlayerControls({
                 onClick={() => setSelectedCompound(compound)}
                 disabled={car.finished}
               >
-                {compound}
+                {COMPOUND_LABEL[compound]}
               </button>
             ))}
           </div>

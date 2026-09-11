@@ -1,4 +1,5 @@
-import type { CarState, DamageSeverity } from "./types";
+import type { CarState, DamageSeverity, WeatherCondition } from "./types";
+import { weatherRiskMultiplier } from "./weather";
 
 export interface DamageEvent {
   severity: DamageSeverity;
@@ -27,12 +28,19 @@ function pick<T>(items: T[], random: () => number): T {
 
 /**
  * Rolls whether a car picks up new damage this lap. More aggressive drivers push
- * the car harder, so aggression scales the odds up a bit (0.7x-1.3x of base).
- * Independent per car per lap — most laps for most cars, nothing happens.
+ * the car harder, so aggression scales the odds up a bit (0.7x-1.3x of base); running
+ * the wrong tire for current conditions (or just being in the wet at all) scales the
+ * odds up further still. Independent per car per lap — most laps for most cars,
+ * nothing happens.
  */
-export function rollForDamage(car: CarState, random: () => number = Math.random): DamageEvent | null {
+export function rollForDamage(
+  car: CarState,
+  weather: WeatherCondition,
+  random: () => number = Math.random
+): DamageEvent | null {
   const aggressionFactor = 0.7 + (car.driver.stats.aggression / 100) * 0.6;
-  if (random() >= DAMAGE_CHANCE_PER_LAP * aggressionFactor) return null;
+  const riskFactor = weatherRiskMultiplier(car.currentCompound, weather);
+  if (random() >= DAMAGE_CHANCE_PER_LAP * aggressionFactor * riskFactor) return null;
 
   const severityRoll = random();
   if (severityRoll < MINOR_THRESHOLD) {

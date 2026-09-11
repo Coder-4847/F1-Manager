@@ -5,6 +5,7 @@ import { pitStopTimeLoss } from "./pitStop";
 import { decideAIAction, generateAIStrategy } from "./strategy";
 import { resolveOvertakeAttempt } from "./overtaking";
 import { applyDamage, clearDamage, rollForDamage } from "./damage";
+import { rollForWeatherChange, weatherLabel } from "./weather";
 import { drivers, getTeam } from "./roster";
 
 export interface RaceSetup {
@@ -48,6 +49,7 @@ export function setupRace(setup: RaceSetup): RaceState {
     currentLap: 0,
     finished: false,
     events: [],
+    weather: "dry",
   };
 }
 
@@ -85,13 +87,24 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
   state.currentLap += 1;
   const lapEvents: LapEvent[] = [];
 
+  const weatherChange = rollForWeatherChange(state.weather, random);
+  if (weatherChange) {
+    state.weather = weatherChange;
+    lapEvents.push({
+      type: "weather",
+      lap: state.currentLap,
+      driverId: "",
+      message: `Weather shifts to ${weatherLabel(weatherChange)} — track conditions are changing!`,
+    });
+  }
+
   // Phase A: reactive AI calls + raw lap time / pit stop determination, no totals touched yet.
   const computed = new Map<string, LapCompute>();
 
   for (const car of state.cars) {
     if (car.finished) continue;
 
-    const damageEvent = rollForDamage(car, random);
+    const damageEvent = rollForDamage(car, state.weather, random);
     if (damageEvent) {
       applyDamage(car, damageEvent);
       lapEvents.push({
@@ -112,6 +125,7 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
 
       const ctx: AIDecisionContext = {
         track: state.track,
+        weather: state.weather,
         gapAheadSeconds: ahead ? self.totalTime - ahead.totalTime : null,
         gapBehindSeconds: behind ? behind.totalTime - self.totalTime : null,
         aheadTireAge: ahead ? ahead.tireAge : null,
@@ -128,7 +142,7 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
     const duePitStop: PitStopPlan | undefined =
       car.pitPlan[0]?.lap === state.currentLap ? car.pitPlan.shift() : undefined;
 
-    const rawLapTime = calculateLapTime(car, state.track, random);
+    const rawLapTime = calculateLapTime(car, state.track, state.weather, random);
     const repaired = Boolean(duePitStop && car.pendingRepairSeconds !== undefined);
     const pitLoss = duePitStop
       ? pitStopTimeLoss(state.track, random) + (repaired ? car.pendingRepairSeconds! : 0)
@@ -218,6 +232,19 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
 
 function getPlayerCar(state: RaceState): CarState | undefined {
   return state.cars.find((c) => c.isPlayer);
+}
+
+/**
+ * Applies a pre-race plan (starting tires, driving mode, and pit stop schedule) to the
+ * player's car. Only meaningful before the race has started (currentLap 0) — used by the
+ * Racing Plan screen to turn the player's choices into the actual starting CarState.
+ */
+export function applyPlayerPlan(state: RaceState, plan: InitialStrategy): void {
+  const car = getPlayerCar(state);
+  if (!car) return;
+  car.currentCompound = plan.startingCompound;
+  car.drivingMode = plan.drivingMode;
+  car.pitPlan = [...plan.pitPlan].sort((a, b) => a.lap - b.lap);
 }
 
 /** Changes the player car's driving mode with immediate effect from the next simulated lap. */

@@ -1,9 +1,12 @@
 // Core domain types for the race simulation engine.
 // This module has zero React/UI dependencies so it can be tested and reused in isolation.
 
-export type TireCompound = "soft" | "medium" | "hard";
+export type TireCompound = "soft" | "medium" | "hard" | "intermediate" | "wet";
 
 export type DrivingMode = "push" | "balanced" | "conserve";
+
+/** dry = normal grip; damp = light rain/drying track, suits intermediates; wet = heavy rain, suits full wets. */
+export type WeatherCondition = "dry" | "damp" | "wet";
 
 export interface DriverStats {
   /** Raw one-lap pace, 0-100. Higher is faster. */
@@ -101,8 +104,9 @@ export interface CarState {
 }
 
 export interface LapEvent {
-  type: "pit-stop" | "overtake" | "damage";
+  type: "pit-stop" | "overtake" | "damage" | "weather";
   lap: number;
+  /** Empty for race-wide events (currently just "weather") that aren't tied to one car. */
   driverId: string;
   message: string;
 }
@@ -113,4 +117,5 @@ export interface RaceState {
   currentLap: number;
   finished: boolean;
   events: LapEvent[];
+  weather: WeatherCondition;
 }

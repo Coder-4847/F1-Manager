@@ -1,5 +1,6 @@
-import type { CarState, Driver, DrivingMode, PitStopPlan, TireCompound, Track } from "./types";
+import type { CarState, Driver, DrivingMode, PitStopPlan, TireCompound, Track, WeatherCondition } from "./types";
 import { tireWearPercent } from "./tires";
+import { weatherMismatch } from "./weather";
 
 export interface InitialStrategy {
   startingCompound: TireCompound;
@@ -22,6 +23,7 @@ export function generateAIStrategy(driver: Driver, _track: Track, random: () => 
 
 export interface AIDecisionContext {
   track: Track;
+  weather: WeatherCondition;
   /** Gap to the car directly ahead in the standings, seconds. Null if leading. */
   gapAheadSeconds: number | null;
   /** Gap to the car directly behind, seconds. Null if last. */
@@ -41,6 +43,26 @@ const BASE_PIT_THRESHOLD = 72;
 const MIN_STINT_LAPS = 8;
 const CLOSE_GAP_SECONDS = 3;
 const BATTLE_GAP_SECONDS = 1.5;
+
+/** Slick choice when it's dry — unchanged from the original dry-only logic. */
+function pickSlickCompound(lapsRemaining: number, aggression: number, random: () => number): TireCompound {
+  if (lapsRemaining <= 16) return random() < 0.5 ? "medium" : "soft";
+  if (aggression >= 65) return "soft";
+  if (aggression <= 40) return "hard";
+  return "medium";
+}
+
+/** Picks a pit compound appropriate for current conditions — wets/inters when it's wet/damp, otherwise the usual dry-tire logic. */
+function pickCompoundForWeather(
+  weather: WeatherCondition,
+  lapsRemaining: number,
+  aggression: number,
+  random: () => number
+): TireCompound {
+  if (weather === "wet") return "wet";
+  if (weather === "damp") return "intermediate";
+  return pickSlickCompound(lapsRemaining, aggression, random);
+}
 
 /**
  * Reactive per-lap strategy call for one AI car. Looks at tire wear plus the
@@ -84,21 +106,21 @@ export function decideAIAction(car: CarState, ctx: AIDecisionContext, random: ()
   const urgentDamage = car.damageSeverity === "major" || car.damageSeverity === "mechanical";
   if (car.damageSeverity === "minor") threshold -= 15;
 
+  // A badly wrong tire for the conditions (e.g. slicks in heavy rain) is urgent enough
+  // to pit for regardless of tire life; a one-step mismatch just makes it more likely.
+  const weatherGap = weatherMismatch(car.currentCompound, ctx.weather);
+  const urgentWeather = weatherGap >= 2;
+  if (weatherGap === 1) threshold -= 20;
+
   const lateRaceGuard = lapsRemaining <= 4 && wearPct < 92;
   const shouldPit =
-    urgentDamage || (car.tireAge >= MIN_STINT_LAPS && !lateRaceGuard && wearPct >= threshold);
+    urgentDamage ||
+    urgentWeather ||
+    (car.tireAge >= MIN_STINT_LAPS && !lateRaceGuard && wearPct >= threshold);
 
   let pitCompound: TireCompound | undefined;
   if (shouldPit) {
-    if (lapsRemaining <= 16) {
-      pitCompound = random() < 0.5 ? "medium" : "soft";
-    } else if (car.driver.stats.aggression >= 65) {
-      pitCompound = "soft";
-    } else if (car.driver.stats.aggression <= 40) {
-      pitCompound = "hard";
-    } else {
-      pitCompound = "medium";
-    }
+    pitCompound = pickCompoundForWeather(ctx.weather, lapsRemaining, car.driver.stats.aggression, random);
   }
 
   const inBattle =

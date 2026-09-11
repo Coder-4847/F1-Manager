@@ -5,6 +5,8 @@ const COMPOUND_LABEL: Record<TireCompound, string> = {
   soft: "S",
   medium: "M",
   hard: "H",
+  intermediate: "I",
+  wet: "W",
 };
 
 function wearColor(pct: number): string {

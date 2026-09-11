@@ -13,8 +13,14 @@ import { SeasonStandings } from "./ui/SeasonStandings";
 import { DriverProfile } from "./ui/DriverProfile";
 import { SeasonSetup } from "./ui/SeasonSetup";
 import { DamageAlert } from "./ui/DamageAlert";
+import { WeatherAlert } from "./ui/WeatherAlert";
+import { RacingPlan } from "./ui/RacingPlan";
 import type { InitialStrategy } from "./sim/strategy";
 import type { SeasonRound } from "./sim/season";
+import type { WeatherCondition } from "./sim/types";
+
+const WEATHER_ICON: Record<WeatherCondition, string> = { dry: "☀", damp: "🌥", wet: "🌧" };
+const WEATHER_LABEL: Record<WeatherCondition, string> = { dry: "Dry", damp: "Damp", wet: "Wet" };
 
 const PLAYER_DRIVER_ID = "k-1"; // Ravi Chandran, Kestrel GP — solid midfield car/driver
 const PLAYER_STRATEGY: InitialStrategy = {
@@ -50,6 +56,8 @@ function App() {
     speed,
     tickDurationMs,
     damageAlert,
+    weatherAlert,
+    planPending,
     setSpeed,
     play,
     pause,
@@ -59,7 +67,11 @@ function App() {
     queuePitStop,
     cancelPitStop,
     resolveDamage,
+    resolveWeather,
+    confirmPlan,
   } = race;
+
+  const blocked = damageAlert || weatherAlert || planPending;
 
   const [showProfileEditor, setShowProfileEditor] = useState(false);
   const [showSeasonSetup, setShowSeasonSetup] = useState(false);
@@ -96,8 +108,11 @@ function App() {
           </div>
         </div>
         <p className="subtitle">
-          {track.name} &middot; {track.totalLaps} laps &middot; managing{" "}
-          <strong>#{playerDriver.number} {playerDriver.name}</strong> ({playerTeam.name}
+          {track.name} &middot; {track.totalLaps} laps &middot;{" "}
+          <span className={`weather-tag weather-tag--${raceState.weather}`}>
+            {WEATHER_ICON[raceState.weather]} {WEATHER_LABEL[raceState.weather]}
+          </span>{" "}
+          &middot; managing <strong>#{playerDriver.number} {playerDriver.name}</strong> ({playerTeam.name}
           {playerDriver.nationality ? ` · ${playerDriver.nationality}` : ""})
         </p>
       </header>
@@ -125,7 +140,31 @@ function App() {
         />
       )}
 
-      {damageAlert && playerCar && (
+      {planPending && playerCar && (
+        <RacingPlan
+          trackName={track.name}
+          totalLaps={track.totalLaps}
+          initialPlan={{
+            startingCompound: playerCar.currentCompound,
+            drivingMode: playerCar.drivingMode,
+            pitPlan: playerCar.pitPlan,
+          }}
+          onStart={confirmPlan}
+          hasSave={hasSave}
+          onLoad={loadProgress}
+        />
+      )}
+
+      {!planPending && weatherAlert && playerCar && (
+        <WeatherAlert
+          weather={raceState.weather}
+          car={playerCar}
+          onPit={(compound) => resolveWeather("pit", compound)}
+          onPush={() => resolveWeather("push")}
+        />
+      )}
+
+      {!planPending && !weatherAlert && damageAlert && playerCar && (
         <DamageAlert
           car={playerCar}
           onPit={() => resolveDamage("pit")}
@@ -141,7 +180,7 @@ function App() {
         seasonComplete={seasonComplete}
         speed={speed}
         hasSave={hasSave}
-        blocked={damageAlert}
+        blocked={blocked}
         onPlay={play}
         onPause={pause}
         onStep={step}

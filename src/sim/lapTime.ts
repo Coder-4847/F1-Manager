@@ -1,5 +1,6 @@
-import type { CarState, DrivingMode, Track } from "./types";
+import type { CarState, DrivingMode, Track, WeatherCondition } from "./types";
 import { tireCompounds, tireWearPenalty } from "./tires";
+import { tireWeatherPenaltySeconds, weatherBaseLapPenaltySeconds, weatherLevel } from "./weather";
 
 const REFERENCE_PACE = 85;
 const PACE_SCALE_SECONDS_PER_POINT = 0.08;
@@ -23,11 +24,17 @@ const DRIVING_MODE_WEAR_MULTIPLIER: Record<DrivingMode, number> = {
  * Simulates one lap for a car and returns the lap time in seconds.
  * Pure function of current state + a random source, so it's easy to test.
  */
-export function calculateLapTime(car: CarState, track: Track, random: () => number = Math.random): number {
+export function calculateLapTime(
+  car: CarState,
+  track: Track,
+  weather: WeatherCondition,
+  random: () => number = Math.random
+): number {
   const combinedPace = 0.5 * car.team.carPerformance + 0.5 * car.driver.stats.pace;
   const pacePenalty = (REFERENCE_PACE - combinedPace) * PACE_SCALE_SECONDS_PER_POINT;
 
-  const compoundDelta = tireCompounds[car.currentCompound].paceDeltaSeconds;
+  const compoundDelta =
+    tireCompounds[car.currentCompound].paceDeltaSeconds + tireWeatherPenaltySeconds(car.currentCompound, weather);
 
   // Higher tireManagement stat -> lower wear multiplier (0.6-1.0 range).
   const managementFactor = 1 - (car.driver.stats.tireManagement / 100) * 0.4;
@@ -42,9 +49,12 @@ export function calculateLapTime(car: CarState, track: Track, random: () => numb
   const fuelPenalty = MAX_FUEL_PENALTY_SECONDS * lapsRemainingFraction;
 
   const modeDelta = DRIVING_MODE_PACE_DELTA[car.drivingMode];
+  const weatherPenalty = weatherBaseLapPenaltySeconds(weather);
 
   // Consistency reduces random noise: 100 consistency -> ~0 noise, 0 -> full noise.
-  const noiseAmplitude = ((100 - car.driver.stats.consistency) / 100) * MAX_RANDOM_NOISE_SECONDS;
+  // Wetter conditions amplify that noise further — everyone's a bit scrappier in the rain.
+  const noiseAmplitude =
+    ((100 - car.driver.stats.consistency) / 100) * MAX_RANDOM_NOISE_SECONDS * (1 + weatherLevel(weather) * 0.25);
   const noise = (random() - 0.5) * 2 * noiseAmplitude;
 
   const lapTime =
@@ -54,6 +64,7 @@ export function calculateLapTime(car: CarState, track: Track, random: () => numb
     wearPenalty +
     fuelPenalty +
     modeDelta +
+    weatherPenalty +
     noise +
     car.damagePenaltySeconds;
 

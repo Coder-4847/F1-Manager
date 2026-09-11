@@ -23,6 +23,22 @@ export const tireCompounds: Record<TireCompound, TireCompoundDef> = {
     degradationPerLap: 0.035,
     degradationGrowth: 0.001,
   },
+  // Wet-weather compounds: paceDeltaSeconds here is their inherent delta *in the right
+  // conditions* — how much slower conditions are in general comes from
+  // weatherBaseLapPenaltySeconds(), and running them in the wrong conditions comes from
+  // tireWeatherPenaltySeconds() (see weather.ts). Both are on top of this base number.
+  intermediate: {
+    compound: "intermediate",
+    paceDeltaSeconds: 0.2,
+    degradationPerLap: 0.05,
+    degradationGrowth: 0.0015,
+  },
+  wet: {
+    compound: "wet",
+    paceDeltaSeconds: 0.8,
+    degradationPerLap: 0.04,
+    degradationGrowth: 0.001,
+  },
 };
 
 /**
@@ -33,6 +49,8 @@ const DISPLAY_WEAR_REFERENCE_LAPS: Record<TireCompound, number> = {
   soft: 20,
   medium: 28,
   hard: 38,
+  intermediate: 25,
+  wet: 30,
 };
 
 /** 0-100 wear percentage for UI display, based on tire age vs. a reference stint length. */

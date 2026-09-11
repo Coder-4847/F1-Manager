@@ -232,6 +232,80 @@ src/
     player get hit with a blocking popup, both "Push Through" and "Pit for
     Repairs" paths, and the damage indicator appearing/clearing correctly —
     then ran the race to completion with no errors.
+14. **Racing plans & weather** — two features landed together since weather
+    needed the new tire compounds and the pre-race screen was the natural
+    place to pick a starting compound suited to them.
+    - **Tire compounds**: `TireCompound` gained `"intermediate"` and
+      `"wet"` (`sim/types.ts`, defined in `sim/tires.ts` alongside the
+      three slicks). Green/blue chips in `TireBadge.tsx`, matching real F1
+      convention.
+    - **Weather**: new `sim/weather.ts` — `WeatherCondition` is
+      `"dry"|"damp"|"wet"`, stored on `RaceState.weather` (starts `"dry"`
+      every race). Each lap, `rollForWeatherChange` (~1% chance) can shift
+      it one step, occasionally two ("drastic" — dry straight to wet or
+      back, rarer, weighted in `TRANSITIONS`). The wrongness of a tire for
+      current conditions is a single `weatherMismatch()` value (0-2, compound
+      "grip level" vs weather "severity level"); that feeds three things:
+      `tireWeatherPenaltySeconds()` (lap time, folded into `lapTime.ts`),
+      `weatherRiskMultiplier()` (scales `damage.ts`'s `rollForDamage` chance
+      — explicitly "higher risk of damage... in rainy weather" from the
+      user's request), and `decideAIAction` in `strategy.ts` (mismatch >=2
+      forces an immediate same-lap pit for the right compound, mismatch ===1
+      just lowers the pit threshold — same pattern as damage urgency).
+      `weatherBaseLapPenaltySeconds()` also slows *everyone* a bit in the
+      rain regardless of tire, and noise amplitude in `lapTime.ts` scales up
+      with conditions (rain makes racing scrappier for everyone). The player
+      gets a blocking `WeatherAlert` modal (`ui/WeatherAlert.tsx`) on *any*
+      weather change (not just severe ones) with a compound picker
+      pre-selecting the ideal tire, "Pit Now" or "Push Through" — same
+      pause/block wiring in `useRace.ts` as the damage alert
+      (`weatherAlert` state, checked alongside `damageAlert` in `step()`).
+      Current conditions show as an icon+label in the header subtitle at
+      all times, not just during the alert.
+    - **Racing Plan**: before every race (initial load, Next Round, Reset,
+      Restart, and starting a custom season — anywhere `useRace` builds a
+      fresh lap-0 state) a blocking `RacingPlan` modal (`ui/RacingPlan.tsx`)
+      now appears: starting compound, driving mode, and a fully custom
+      multi-stop pit plan (add/remove/edit lap+compound per stop, no count
+      limit). Implemented as a `planPending` flag in `useRace.ts` (`true`
+      at mount and after `reset`/`switchTrack`, `false` after
+      `restoreRaceState`) that blocks Play/Step exactly like the damage/
+      weather alerts. Confirming calls the new `applyPlayerPlan()` in
+      `raceEngine.ts`, which mutates the already-created player `CarState`
+      directly (compound/mode/pitPlan) rather than re-running `setupRace` —
+      much less invasive than threading a dynamic strategy through
+      `useSeason`. The modal pre-fills from the player's current (placeholder)
+      car state, so accepting it unedited is a valid "I don't want to
+      bother" path — satisfies "the *option* to create a plan" without a
+      separate skip button. `App.tsx`'s three pre-race/mid-race modals
+      (RacingPlan, WeatherAlert, DamageAlert) are mutually exclusive by
+      render-order priority in case two conditions are somehow both true
+      the same lap.
+    - Bumped the season-save key to `f1-manager-save-v4` (`RaceState`
+      gained `weather`) — and this bump also retroactively covers a gap
+      from phase 13, which added `CarState` damage fields without its own
+      version bump.
+    - **Bug found and fixed during testing**: the pre-race `RacingPlan`
+      modal's full-viewport backdrop visually sits on top of everything,
+      including the header's Save/Load/Custom Season buttons — a coordinate
+      click on "Load" was actually landing on the invisible backdrop above
+      it and doing nothing, making a saved game **permanently unreachable**
+      on a fresh page load (the modal has no close/cancel by design, so
+      there was no way out). Fixed by adding a "Load Saved Game Instead"
+      link inside the `RacingPlan` modal itself (`hasSave`/`onLoad` props)
+      rather than changing the backdrop's click-blocking behavior. Worth
+      remembering if another blocking modal is added later — check whether
+      it can strand a player away from Load.
+    - Verified in-browser: built a custom plan (changed starting compound,
+      added a second stop with a weather compound), confirmed the player's
+      car actually started on the chosen tire; ran a custom 100-lap race,
+      watched weather shift dry -> damp, saw multiple AI cars react with
+      same-lap pits to intermediates, took the player through both a
+      damage alert and the weather alert (chose Pit Now, confirmed the tire
+      changed and damage feed logged it), ran the race to completion with
+      no console/server errors, confirmed Reset reopens the plan modal, and
+      confirmed the Load-bug fix by saving mid-race, reloading the page
+      fresh, and using the new in-modal Load link to restore it correctly.
 
 ## A real bug that was found and fixed (worth knowing about)
 

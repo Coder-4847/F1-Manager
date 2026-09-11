@@ -55,6 +55,22 @@
   color: var(--text-h);
 }
 
+.weather-tag {
+  font-weight: 600;
+}
+
+.weather-tag--dry {
+  color: var(--text);
+}
+
+.weather-tag--damp {
+  color: var(--yellow);
+}
+
+.weather-tag--wet {
+  color: #4aa3ff;
+}
+
 .app__header-actions {
   margin-left: auto;
   display: flex;
@@ -941,4 +957,159 @@ h2 {
   .season-standings {
     grid-template-columns: 1fr;
   }
+}
+
+/* Compact segmented control for 5-way tire compound pickers */
+
+.segmented--compounds .segmented__btn {
+  padding: 0.4rem 0.55rem;
+  font-size: 10px;
+}
+
+/* Tire chip colors for the new weather compounds */
+
+.tire-chip--intermediate {
+  background: #43b02a;
+  color: #fff;
+}
+
+.tire-chip--wet {
+  background: #0067ad;
+  color: #fff;
+}
+
+/* Weather alert modal */
+
+.weather-alert {
+  max-width: 460px;
+  text-align: center;
+}
+
+.weather-alert__badge {
+  display: inline-block;
+  font-family: var(--heading);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  margin-bottom: 0.75rem;
+}
+
+.weather-alert__badge--dry {
+  background: var(--panel-bg-2);
+  color: var(--text);
+}
+
+.weather-alert__badge--damp {
+  background: var(--yellow-dim);
+  color: var(--yellow);
+}
+
+.weather-alert__badge--wet {
+  background: rgba(74, 163, 255, 0.16);
+  color: #4aa3ff;
+  box-shadow: 0 0 14px rgba(74, 163, 255, 0.4);
+}
+
+.weather-alert .driver-profile__field {
+  text-align: left;
+  margin: 1rem 0 1.25rem;
+}
+
+.weather-alert .segmented--compounds {
+  justify-content: center;
+}
+
+/* Racing plan modal */
+
+.racing-plan__load {
+  font-size: 0.7rem;
+  text-transform: none;
+  letter-spacing: normal;
+  background: none;
+  border: none;
+  color: var(--yellow);
+  text-decoration: underline;
+  padding: 0;
+}
+
+.racing-plan__load:hover {
+  color: var(--yellow);
+  opacity: 0.8;
+  background: none;
+}
+
+.racing-plan__track {
+  color: var(--text);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.racing-plan__row {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.racing-plan__stops-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.racing-plan__stops-header h3 {
+  margin: 0;
+}
+
+.racing-plan__stop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.racing-plan__stop {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-bg-2);
+}
+
+.racing-plan__stop-num {
+  font-family: var(--heading);
+  font-weight: 700;
+  font-size: 0.75rem;
+  color: var(--text-h);
+  white-space: nowrap;
+}
+
+.racing-plan__stop-lap {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.racing-plan__stop-lap input {
+  font: inherit;
+  width: 3.4rem;
+  padding: 0.25rem 0.3rem;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  background: var(--panel-bg);
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
 }
