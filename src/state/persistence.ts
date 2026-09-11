@@ -1,39 +1,37 @@
 import type { RaceState } from "../sim/types";
+import type { SeasonState } from "../sim/season";
 
-const SAVE_KEY = "f1-manager-save-v1";
+const SAVE_KEY = "f1-manager-save-v2";
 
-// RaceState is plain, JSON-safe data (no class instances or functions), so a
-// straight stringify/parse round-trip is enough — no custom (de)serializer needed.
+export interface SeasonSave {
+  season: SeasonState;
+  raceState: RaceState;
+}
 
-export function saveRaceState(state: RaceState): void {
+// Both SeasonState and RaceState are plain, JSON-safe data (no class instances
+// or functions), so a straight stringify/parse round-trip is enough.
+
+export function saveSeasonProgress(save: SeasonSave): void {
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+    localStorage.setItem(SAVE_KEY, JSON.stringify(save));
   } catch {
     // Storage can be unavailable (private browsing, quota) — saving is best-effort.
   }
 }
 
-export function loadRaceState(): RaceState | null {
+export function loadSeasonProgress(): SeasonSave | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
-    return raw ? (JSON.parse(raw) as RaceState) : null;
+    return raw ? (JSON.parse(raw) as SeasonSave) : null;
   } catch {
     return null;
   }
 }
 
-export function hasSavedRaceState(): boolean {
+export function hasSeasonSave(): boolean {
   try {
     return localStorage.getItem(SAVE_KEY) !== null;
   } catch {
     return false;
-  }
-}
-
-export function clearSavedRaceState(): void {
-  try {
-    localStorage.removeItem(SAVE_KEY);
-  } catch {
-    // ignore
   }
 }

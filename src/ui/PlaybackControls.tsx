@@ -7,6 +7,7 @@ export interface PlaybackControlsProps {
   totalLaps: number;
   playing: boolean;
   finished: boolean;
+  seasonComplete: boolean;
   speed: PlaybackSpeed;
   hasSave: boolean;
   onPlay: () => void;
@@ -16,6 +17,7 @@ export interface PlaybackControlsProps {
   onSetSpeed: (speed: PlaybackSpeed) => void;
   onSave: () => void;
   onLoad: () => void;
+  onNextRound: () => void;
 }
 
 export function PlaybackControls({
@@ -23,6 +25,7 @@ export function PlaybackControls({
   totalLaps,
   playing,
   finished,
+  seasonComplete,
   speed,
   hasSave,
   onPlay,
@@ -32,6 +35,7 @@ export function PlaybackControls({
   onSetSpeed,
   onSave,
   onLoad,
+  onNextRound,
 }: PlaybackControlsProps) {
   return (
     <div className="playback-controls">
@@ -59,14 +63,19 @@ export function PlaybackControls({
             </button>
           ))}
         </div>
-        <button onClick={onSave} title="Save progress to this browser">
+        <button onClick={onSave} title="Save season progress to this browser">
           Save
         </button>
-        <button onClick={onLoad} disabled={!hasSave} title="Load your last saved race">
+        <button onClick={onLoad} disabled={!hasSave} title="Load your last saved season">
           Load
         </button>
       </div>
-      {finished && <div className="playback-controls__finished">Race finished</div>}
+      {finished && !seasonComplete && (
+        <button className="playback-controls__next-round" onClick={onNextRound}>
+          Next Race →
+        </button>
+      )}
+      {finished && seasonComplete && <div className="playback-controls__finished">Season complete!</div>}
     </div>
   );
 }

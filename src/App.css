@@ -14,16 +14,6 @@
   margin-bottom: 0.75rem;
 }
 
-.track-selector {
-  font: inherit;
-  padding: 0.4rem 0.7rem;
-  border: 1px solid var(--border);
-  background: var(--panel-bg);
-  color: var(--text-h);
-  border-radius: 6px;
-  margin-bottom: 0.75rem;
-}
-
 button {
   font: inherit;
   padding: 0.4rem 0.9rem;
@@ -76,11 +66,34 @@ h2 {
   font-weight: 600;
 }
 
+.playback-controls__next-round {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1a1a1a;
+  font-weight: 700;
+}
+
+.season-complete-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
 .player-summary {
   font-size: 1.1rem;
   font-weight: 700;
   color: var(--accent);
   margin-bottom: 0.75rem;
+}
+
+.section-spacer {
+  margin-top: 1.5rem;
 }
 
 /* Track strip */
@@ -345,4 +358,41 @@ h2 {
 
 .event-feed__item--overtake {
   color: var(--wear-low);
+}
+
+/* Season standings */
+
+.season-standings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.season-standings h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.standings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.standings-table td {
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+
+.standings-table__points {
+  text-align: right;
+  font-weight: 600;
+}
+
+@media (max-width: 600px) {
+  .season-standings {
+    grid-template-columns: 1fr;
+  }
 }

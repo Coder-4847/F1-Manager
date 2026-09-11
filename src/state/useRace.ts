@@ -10,7 +10,6 @@ import {
 import type { DrivingMode, RaceState, TireCompound, Track } from "../sim/types";
 import type { InitialStrategy } from "../sim/strategy";
 import { getTrack } from "../sim/tracks";
-import { hasSavedRaceState, loadRaceState, saveRaceState } from "./persistence";
 
 export type PlaybackSpeed = 0.5 | 1 | 2 | 4;
 
@@ -76,19 +75,10 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
     [playerDriverId, playerStrategy]
   );
 
-  const [hasSave, setHasSave] = useState(() => hasSavedRaceState());
-
-  const save = useCallback(() => {
-    saveRaceState(raceState);
-    setHasSave(true);
-  }, [raceState]);
-
-  const load = useCallback(() => {
-    const loaded = loadRaceState();
-    if (loaded) {
-      setPlaying(false);
-      setRaceState(loaded);
-    }
+  /** Replaces the race state outright — used when loading a saved season/race. */
+  const restoreRaceState = useCallback((state: RaceState) => {
+    setPlaying(false);
+    setRaceState(state);
   }, []);
 
   const setDrivingMode = useCallback((mode: DrivingMode) => {
@@ -127,9 +117,7 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
     step,
     reset,
     switchTrack,
-    hasSave,
-    save,
-    load,
+    restoreRaceState,
     setDrivingMode,
     queuePitStop,
     cancelPitStop,

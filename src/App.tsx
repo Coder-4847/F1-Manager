@@ -1,13 +1,12 @@
 import "./App.css";
-import { monza } from "./sim/tracks";
 import { drivers, getTeam } from "./sim/roster";
-import { useRace } from "./state/useRace";
+import { useSeason } from "./state/useSeason";
 import { Leaderboard } from "./ui/Leaderboard";
 import { EventFeed } from "./ui/EventFeed";
 import { PlayerControls } from "./ui/PlayerControls";
 import { PlaybackControls } from "./ui/PlaybackControls";
 import { TrackPositionStrip } from "./ui/TrackPositionStrip";
-import { TrackSelector } from "./ui/TrackSelector";
+import { SeasonStandings } from "./ui/SeasonStandings";
 import type { InitialStrategy } from "./sim/strategy";
 
 const PLAYER_DRIVER_ID = "k-1"; // Ravi Chandran, Kestrel GP — solid midfield car/driver
@@ -19,6 +18,19 @@ const PLAYER_STRATEGY: InitialStrategy = {
 
 function App() {
   const {
+    season,
+    race,
+    seasonComplete,
+    driverStandings,
+    constructorStandings,
+    advanceToNextRound,
+    restartSeason,
+    hasSave,
+    saveProgress,
+    loadProgress,
+  } = useSeason({ playerDriverId: PLAYER_DRIVER_ID, playerStrategy: PLAYER_STRATEGY });
+
+  const {
     raceState,
     standings,
     playerCar,
@@ -29,28 +41,24 @@ function App() {
     pause,
     step,
     reset,
-    switchTrack,
-    hasSave,
-    save,
-    load,
     setDrivingMode,
     queuePitStop,
     cancelPitStop,
-  } = useRace({ initialTrack: monza, playerDriverId: PLAYER_DRIVER_ID, playerStrategy: PLAYER_STRATEGY });
+  } = race;
 
   const playerDriver = drivers.find((d) => d.id === PLAYER_DRIVER_ID)!;
   const playerStanding = standings.find((row) => row.car.isPlayer);
   const track = raceState.track;
+  const roundNumber = Math.min(season.roundIndex + 1, season.calendar.length);
 
   return (
     <div className="app">
       <header className="app__header">
         <h1>F1 Manager</h1>
         <p className="subtitle">
-          {track.name} &middot; {track.totalLaps} laps &middot; managing{" "}
-          <strong>{playerDriver.name}</strong> ({getTeam(playerDriver.teamId).name})
+          Round {roundNumber} of {season.calendar.length} &middot; {track.name} &middot; {track.totalLaps} laps
+          &middot; managing <strong>{playerDriver.name}</strong> ({getTeam(playerDriver.teamId).name})
         </p>
-        <TrackSelector selectedTrackId={track.id} onSelect={switchTrack} disabled={playing} />
       </header>
 
       <PlaybackControls
@@ -58,6 +66,7 @@ function App() {
         totalLaps={track.totalLaps}
         playing={playing}
         finished={raceState.finished}
+        seasonComplete={seasonComplete}
         speed={speed}
         hasSave={hasSave}
         onPlay={play}
@@ -65,9 +74,16 @@ function App() {
         onStep={step}
         onReset={reset}
         onSetSpeed={setSpeed}
-        onSave={save}
-        onLoad={load}
+        onSave={saveProgress}
+        onLoad={loadProgress}
+        onNextRound={advanceToNextRound}
       />
+
+      {seasonComplete && (
+        <div className="season-complete-banner">
+          Season complete! <button onClick={restartSeason}>Start New Season</button>
+        </div>
+      )}
 
       {playerStanding && (
         <div className="player-summary">
@@ -82,6 +98,13 @@ function App() {
         <section className="layout__main">
           <h2>Leaderboard</h2>
           <Leaderboard standings={standings} currentLap={raceState.currentLap} events={raceState.events} />
+
+          <h2 className="section-spacer">Championship</h2>
+          <SeasonStandings
+            driverStandings={driverStandings}
+            constructorStandings={constructorStandings}
+            playerDriverId={PLAYER_DRIVER_ID}
+          />
         </section>
 
         <aside className="layout__side">
