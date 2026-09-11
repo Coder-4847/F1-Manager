@@ -1,0 +1,53 @@
+.app {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+  text-align: left;
+}
+
+.subtitle {
+  color: #888;
+  margin-bottom: 1.5rem;
+}
+
+button {
+  font-size: 1rem;
+  padding: 0.6rem 1.4rem;
+  cursor: pointer;
+}
+
+.results {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid #333;
+}
+
+.player-row {
+  font-weight: 700;
+  color: #61dafb;
+}
+
+.event-log {
+  font-family: monospace;
+  font-size: 0.85rem;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-left: 1.2rem;
+}
+
+.event-log li {
+  margin-bottom: 0.2rem;
+}
