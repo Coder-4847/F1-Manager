@@ -46,7 +46,7 @@ export function weatherLabel(weather: WeatherCondition): string {
   return "Wet";
 }
 
-const WEATHER_CHANGE_CHANCE_PER_LAP = 0.01;
+const WEATHER_CHANGE_CHANCE_PER_LAP = 0.008;
 
 /** Possible next states from each condition, weighted — a step to the adjacent state is
  *  far more likely than a "drastic" jump straight from dry to wet or back. */
@@ -80,4 +80,28 @@ export function rollForWeatherChange(
     if (roll < cumulative) return option.to;
   }
   return options[options.length - 1].to;
+}
+
+/**
+ * Generates a plausible weather forecast for a stretch of upcoming laps, starting from
+ * `fromWeather` — a preview using the exact same transition model the live race uses, so
+ * it's a genuinely informative planning aid. It is **not** a guarantee: the actual race
+ * weather is rolled independently lap by lap with its own random source, so live
+ * conditions can turn out differently than forecast (as with real weather). Call this
+ * fresh — with a fresh random source, never the race's own — any time an up-to-date
+ * forecast is wanted, including mid-race.
+ */
+export function generateWeatherForecast(
+  fromWeather: WeatherCondition,
+  lapCount: number,
+  random: () => number = Math.random
+): WeatherCondition[] {
+  const forecast: WeatherCondition[] = [];
+  let current = fromWeather;
+  for (let i = 0; i < lapCount; i++) {
+    const changed = rollForWeatherChange(current, random);
+    if (changed) current = changed;
+    forecast.push(current);
+  }
+  return forecast;
 }

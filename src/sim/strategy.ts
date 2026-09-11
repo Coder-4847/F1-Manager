@@ -112,11 +112,17 @@ export function decideAIAction(car: CarState, ctx: AIDecisionContext, random: ()
   const urgentWeather = weatherGap >= 2;
   if (weatherGap === 1) threshold -= 20;
 
+  // Even in an urgent situation, not every car commits to pitting immediately — real
+  // teams sometimes gamble on staying out, more often the more aggressive the driver
+  // is. Re-rolled every lap the situation persists, so nobody gambles forever: some
+  // cars pit straight away, others hold out a lap or two, just like a real race.
+  const urgent = urgentDamage || urgentWeather;
+  const gambleChance = 0.15 + (car.driver.stats.aggression / 100) * 0.35;
+  const commitsToPit = !urgent || random() >= gambleChance;
+
   const lateRaceGuard = lapsRemaining <= 4 && wearPct < 92;
   const shouldPit =
-    urgentDamage ||
-    urgentWeather ||
-    (car.tireAge >= MIN_STINT_LAPS && !lateRaceGuard && wearPct >= threshold);
+    (urgent && commitsToPit) || (car.tireAge >= MIN_STINT_LAPS && !lateRaceGuard && wearPct >= threshold);
 
   let pitCompound: TireCompound | undefined;
   if (shouldPit) {

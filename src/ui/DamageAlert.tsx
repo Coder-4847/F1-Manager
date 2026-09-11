@@ -21,6 +21,7 @@ export function DamageAlert({ car, onPit, onPush }: DamageAlertProps) {
           {SEVERITY_LABEL[severity]}
         </div>
         <h2>{car.damageLabel}</h2>
+        {car.damageDescription && <p className="damage-alert__flavor">{car.damageDescription}</p>}
         <p className="damage-alert__desc">
           {car.driver.name}'s car is losing <strong>{car.damagePenaltySeconds.toFixed(1)}s</strong> per lap until
           it's repaired. Pitting now will fix it, at the cost of roughly{" "}

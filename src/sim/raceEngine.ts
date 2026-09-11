@@ -6,6 +6,8 @@ import { decideAIAction, generateAIStrategy } from "./strategy";
 import { resolveOvertakeAttempt } from "./overtaking";
 import { applyDamage, clearDamage, rollForDamage } from "./damage";
 import { rollForWeatherChange, weatherLabel } from "./weather";
+import { rollForPenalty } from "./penalties";
+import { rollForRetirement } from "./retirement";
 import { drivers, getTeam } from "./roster";
 
 export interface RaceSetup {
@@ -32,6 +34,7 @@ function createCarState(driver: Driver, isPlayer: boolean, strategy: InitialStra
     finished: false,
     lapTimes: [],
     damagePenaltySeconds: 0,
+    penaltySeconds: 0,
   };
 }
 
@@ -72,6 +75,7 @@ interface LapCompute {
   duePitStop?: PitStopPlan;
   pitLoss?: number;
   repaired?: boolean;
+  penaltySeconds: number;
 }
 
 /** Advances every car by exactly one lap, mutating and returning the same RaceState. */
@@ -139,6 +143,34 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
       }
     }
 
+    // Retirement is checked after driving mode is finalized for this lap (push mode is
+    // one of its risk factors) but before anything else — a retiring car stops mid-lap,
+    // no lap time, no pit stop, nothing further to compute for it.
+    const retirement = rollForRetirement(car, state.weather, random);
+    if (retirement) {
+      car.finished = true;
+      car.retired = true;
+      car.retiredReason = retirement.reason;
+      lapEvents.push({
+        type: "retirement",
+        lap: state.currentLap,
+        driverId: car.driver.id,
+        message: `${car.driver.name} retires from the race — ${retirement.reason.toLowerCase()}!`,
+      });
+      continue;
+    }
+
+    const penaltyEvent = rollForPenalty(car, random);
+    if (penaltyEvent) {
+      car.penaltySeconds += penaltyEvent.seconds;
+      lapEvents.push({
+        type: "penalty",
+        lap: state.currentLap,
+        driverId: car.driver.id,
+        message: `${car.driver.name} handed a ${penaltyEvent.seconds}s time penalty — ${penaltyEvent.reason}.`,
+      });
+    }
+
     const duePitStop: PitStopPlan | undefined =
       car.pitPlan[0]?.lap === state.currentLap ? car.pitPlan.shift() : undefined;
 
@@ -148,7 +180,14 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
       ? pitStopTimeLoss(state.track, random) + (repaired ? car.pendingRepairSeconds! : 0)
       : undefined;
 
-    computed.set(car.driver.id, { car, rawLapTime, duePitStop, pitLoss, repaired });
+    computed.set(car.driver.id, {
+      car,
+      rawLapTime,
+      duePitStop,
+      pitLoss,
+      repaired,
+      penaltySeconds: penaltyEvent?.seconds ?? 0,
+    });
   }
 
   // Phase B: resolve battles in track-position order (leader first) so a fresh
@@ -159,9 +198,9 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
     const entry = computed.get(driverId);
     if (!entry) return; // already finished before this lap
 
-    const { car, rawLapTime, duePitStop, pitLoss, repaired } = entry;
+    const { car, rawLapTime, duePitStop, pitLoss, repaired, penaltySeconds } = entry;
     const preTotal = preLap.get(driverId)!.totalTime;
-    const naiveTotal = preTotal + rawLapTime + (pitLoss ?? 0);
+    const naiveTotal = preTotal + rawLapTime + (pitLoss ?? 0) + penaltySeconds;
 
     let finalTotal = naiveTotal;
 
@@ -263,6 +302,16 @@ export function queuePlayerPitStop(state: RaceState, lap: number, compound: Tire
   if (car) car.pitPlan = [{ lap, compound }];
 }
 
+/**
+ * Replaces the player car's entire remaining pit stop schedule at once — used by the
+ * mid-race Revise Plan screen, where the player can queue up more than one future stop
+ * (unlike `queuePlayerPitStop`, which only ever tracks a single pending stop).
+ */
+export function setPlayerPitPlan(state: RaceState, stops: PitStopPlan[]): void {
+  const car = getPlayerCar(state);
+  if (car) car.pitPlan = [...stops].sort((a, b) => a.lap - b.lap);
+}
+
 /** Clears any pending (not-yet-executed) pit stop for the player car. */
 export function cancelPlayerPitStop(state: RaceState): void {
   const car = getPlayerCar(state);
@@ -282,13 +331,35 @@ export interface StandingsRow {
   gapToLeaderSeconds: number;
 }
 
-/** Standings ordered by total race time (ascending). */
+/**
+ * Standings ordered by total race time (ascending) — retired cars are ranked below every
+ * still-running/classified car (regardless of their frozen total time, which would
+ * otherwise make an early retirement look like it's "leading"), ordered among themselves
+ * by laps completed (most laps first, the standard DNF convention).
+ */
 export function getStandings(state: RaceState): StandingsRow[] {
-  const sorted = [...state.cars].sort((a, b) => a.totalTimeSeconds - b.totalTimeSeconds);
-  const leaderTime = sorted[0]?.totalTimeSeconds ?? 0;
-  return sorted.map((car, index) => ({
+  const active = state.cars.filter((c) => !c.retired).sort((a, b) => a.totalTimeSeconds - b.totalTimeSeconds);
+  const retired = state.cars.filter((c) => c.retired).sort((a, b) => b.lapsCompleted - a.lapsCompleted);
+  const ordered = [...active, ...retired];
+  const leaderTime = active[0]?.totalTimeSeconds ?? 0;
+  return ordered.map((car, index) => ({
     position: index + 1,
     car,
     gapToLeaderSeconds: car.totalTimeSeconds - leaderTime,
+  }));
+}
+
+export interface FinalResultRow {
+  position: number;
+  car: CarState;
+  gapToLeaderSeconds: number;
+  bestLapSeconds: number | null;
+}
+
+/** The post-race classification: same ordering as getStandings, plus each car's best lap. */
+export function getFinalResults(state: RaceState): FinalResultRow[] {
+  return getStandings(state).map((row) => ({
+    ...row,
+    bestLapSeconds: row.car.lapTimes.length > 0 ? Math.min(...row.car.lapTimes) : null,
   }));
 }

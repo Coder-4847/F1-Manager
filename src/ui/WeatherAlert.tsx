@@ -1,5 +1,7 @@
 import { useState } from "react";
 import type { CarState, TireCompound, WeatherCondition } from "../sim/types";
+import { generateWeatherForecast } from "../sim/weather";
+import { WeatherForecast } from "./WeatherForecast";
 
 const COMPOUNDS: TireCompound[] = ["soft", "medium", "hard", "intermediate", "wet"];
 const COMPOUND_LABEL: Record<TireCompound, string> = {
@@ -19,12 +21,16 @@ const RECOMMENDED_COMPOUND: Record<WeatherCondition, TireCompound> = {
 export interface WeatherAlertProps {
   weather: WeatherCondition;
   car: CarState;
+  currentLap: number;
+  totalLaps: number;
   onPit: (compound: TireCompound) => void;
   onPush: () => void;
 }
 
-export function WeatherAlert({ weather, car, onPit, onPush }: WeatherAlertProps) {
+export function WeatherAlert({ weather, car, currentLap, totalLaps, onPit, onPush }: WeatherAlertProps) {
   const [compound, setCompound] = useState<TireCompound>(RECOMMENDED_COMPOUND[weather]);
+  const lapsRemaining = Math.max(0, totalLaps - currentLap);
+  const [forecast] = useState(() => generateWeatherForecast(weather, lapsRemaining));
 
   return (
     <div className="modal-backdrop">
@@ -38,6 +44,12 @@ export function WeatherAlert({ weather, car, onPit, onPush }: WeatherAlertProps)
           <strong>{COMPOUND_LABEL[car.currentCompound].toLowerCase()}</strong> tires — pit for tires suited to
           the conditions, or push through as you are.
         </p>
+        {forecast.length > 0 && (
+          <>
+            <div className="racing-plan__field-label">Updated Forecast</div>
+            <WeatherForecast forecast={forecast} startLap={currentLap + 1} />
+          </>
+        )}
         <div className="driver-profile__field">
           <label>Pit for</label>
           <div className="segmented segmented--compounds">

@@ -5,10 +5,12 @@ import {
   getStandings,
   queuePlayerPitStop,
   setPlayerDrivingMode,
+  setPlayerPitPlan,
   setupRace,
   simulateLap,
 } from "../sim/raceEngine";
-import type { DrivingMode, RaceState, TireCompound, Track } from "../sim/types";
+import { weatherMismatch } from "../sim/weather";
+import type { DrivingMode, PitStopPlan, RaceState, TireCompound, Track } from "../sim/types";
 import type { InitialStrategy } from "../sim/strategy";
 
 export type PlaybackSpeed = 0.5 | 1 | 2 | 4;
@@ -41,31 +43,65 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
   const intervalRef = useRef<number | null>(null);
 
-  // True right after the player's car picks up new damage this lap — playback
-  // pauses and stays paused until the player resolves it (pit or push through).
+  // True right after the player's car picks up serious (major/mechanical) new damage —
+  // minor damage is logged but doesn't interrupt play, to keep alerts from piling up.
   const [damageAlert, setDamageAlert] = useState(false);
-  // True right after the weather changes — same pause-until-resolved treatment.
+  // True right after the weather changes into something that actually invalidates the
+  // player's current tire choice — a change that doesn't affect them doesn't interrupt.
   const [weatherAlert, setWeatherAlert] = useState(false);
   // True before every race until the player confirms a Racing Plan — playback
   // is blocked the same way, so the plan is always locked in before lights-out.
   const [planPending, setPlanPending] = useState(true);
 
+  // The highest lap number already checked for alert-worthy events. Deciding whether to
+  // pop an alert lives in a useEffect (below), reacting to the *committed* raceState,
+  // rather than inside the setRaceState updater itself — StrictMode calls that updater
+  // twice in development with independent random rolls each time, and calling
+  // setWeatherAlert/setDamageAlert as side effects from inside it means the discarded
+  // first call's outcome could still fire a "phantom" alert for an event that never
+  // actually happened in the committed state. This ref stops the effect from re-checking
+  // (and re-alerting on) the same lap again for unrelated re-renders while sitting on it.
+  const lastCheckedLapRef = useRef(0);
+
   const step = useCallback(() => {
     setRaceState((prev) => {
       if (prev.finished || planPending) return prev;
-      simulateLap(prev);
-      const gotDamaged = prev.events.some(
-        (e) => e.type === "damage" && e.lap === prev.currentLap && e.driverId === playerDriverId
-      );
-      const weatherChanged = prev.events.some((e) => e.type === "weather" && e.lap === prev.currentLap);
-      if (gotDamaged || weatherChanged) {
-        setPlaying(false);
-        if (weatherChanged) setWeatherAlert(true);
-        if (gotDamaged) setDamageAlert(true);
-      }
-      return { ...prev };
+      // Cloning before simulateLap (which mutates in place) matters for the same
+      // StrictMode reason: without a fresh clone each call, the second invocation would
+      // mutate an already-mutated `prev` — advancing the race by two laps per tick.
+      const next: RaceState = structuredClone(prev);
+      simulateLap(next);
+      return next;
     });
-  }, [playerDriverId, planPending]);
+  }, [planPending]);
+
+  // Reacts only to the actually-committed raceState, so it can't be fooled by a
+  // StrictMode-duplicated, ultimately-discarded simulation.
+  useEffect(() => {
+    if (raceState.currentLap <= lastCheckedLapRef.current) return;
+    lastCheckedLapRef.current = raceState.currentLap;
+
+    const gotDamaged = raceState.events.some(
+      (e) => e.type === "damage" && e.lap === raceState.currentLap && e.driverId === playerDriverId
+    );
+    const weatherChangedThisLap = raceState.events.some(
+      (e) => e.type === "weather" && e.lap === raceState.currentLap
+    );
+    const playerCar = raceState.cars.find((c) => c.driver.id === playerDriverId);
+
+    const seriousDamage =
+      gotDamaged && (playerCar?.damageSeverity === "major" || playerCar?.damageSeverity === "mechanical");
+    const weatherNowMismatched =
+      weatherChangedThisLap &&
+      playerCar !== undefined &&
+      weatherMismatch(playerCar.currentCompound, raceState.weather) >= 1;
+
+    if (seriousDamage || weatherNowMismatched) {
+      setPlaying(false);
+      if (weatherNowMismatched) setWeatherAlert(true);
+      if (seriousDamage) setDamageAlert(true);
+    }
+  }, [raceState, playerDriverId]);
 
   useEffect(() => {
     if (!playing || damageAlert || weatherAlert || planPending) return;
@@ -87,6 +123,7 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
     setDamageAlert(false);
     setWeatherAlert(false);
     setPlanPending(true);
+    lastCheckedLapRef.current = 0;
     setRaceState((prev) => setupRace({ track: prev.track, playerDriverId, playerStrategy }));
   }, [playerDriverId, playerStrategy]);
 
@@ -96,6 +133,7 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
       setDamageAlert(false);
       setWeatherAlert(false);
       setPlanPending(true);
+      lastCheckedLapRef.current = 0;
       setRaceState(setupRace({ track, playerDriverId, playerStrategy }));
     },
     [playerDriverId, playerStrategy]
@@ -108,27 +146,42 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
     setDamageAlert(false);
     setWeatherAlert(false);
     setPlanPending(false);
+    // The loaded race may already be mid-race — mark everything up to its current lap as
+    // already checked so we don't immediately re-alert on old, already-resolved events.
+    lastCheckedLapRef.current = state.currentLap;
     setRaceState(state);
   }, []);
 
   const setDrivingMode = useCallback((mode: DrivingMode) => {
     setRaceState((prev) => {
-      setPlayerDrivingMode(prev, mode);
-      return { ...prev };
+      const next = structuredClone(prev);
+      setPlayerDrivingMode(next, mode);
+      return next;
     });
   }, []);
 
   const queuePitStop = useCallback((lap: number, compound: TireCompound) => {
     setRaceState((prev) => {
-      queuePlayerPitStop(prev, lap, compound);
-      return { ...prev };
+      const next = structuredClone(prev);
+      queuePlayerPitStop(next, lap, compound);
+      return next;
     });
   }, []);
 
   const cancelPitStop = useCallback(() => {
     setRaceState((prev) => {
-      cancelPlayerPitStop(prev);
-      return { ...prev };
+      const next = structuredClone(prev);
+      cancelPlayerPitStop(next);
+      return next;
+    });
+  }, []);
+
+  /** Replaces the player's entire remaining pit stop schedule — used by the mid-race Revise Plan screen. */
+  const updatePitPlan = useCallback((stops: PitStopPlan[]) => {
+    setRaceState((prev) => {
+      const next = structuredClone(prev);
+      setPlayerPitPlan(next, stops);
+      return next;
     });
   }, []);
 
@@ -136,9 +189,10 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
   const resolveDamage = useCallback((choice: "pit" | "push") => {
     if (choice === "pit") {
       setRaceState((prev) => {
-        const car = prev.cars.find((c) => c.isPlayer);
-        if (car) queuePlayerPitStop(prev, prev.currentLap + 1, car.currentCompound);
-        return { ...prev };
+        const next = structuredClone(prev);
+        const car = next.cars.find((c) => c.isPlayer);
+        if (car) queuePlayerPitStop(next, next.currentLap + 1, car.currentCompound);
+        return next;
       });
     }
     setDamageAlert(false);
@@ -148,8 +202,9 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
   const resolveWeather = useCallback((choice: "pit" | "push", compound?: TireCompound) => {
     if (choice === "pit" && compound) {
       setRaceState((prev) => {
-        queuePlayerPitStop(prev, prev.currentLap + 1, compound);
-        return { ...prev };
+        const next = structuredClone(prev);
+        queuePlayerPitStop(next, next.currentLap + 1, compound);
+        return next;
       });
     }
     setWeatherAlert(false);
@@ -158,8 +213,9 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
   /** Locks in the player's pre-race plan (starting tires, mode, pit schedule) and unblocks playback. */
   const confirmPlan = useCallback((plan: InitialStrategy) => {
     setRaceState((prev) => {
-      applyPlayerPlan(prev, plan);
-      return { ...prev };
+      const next = structuredClone(prev);
+      applyPlayerPlan(next, plan);
+      return next;
     });
     setPlanPending(false);
   }, []);
@@ -187,6 +243,7 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
     setDrivingMode,
     queuePitStop,
     cancelPitStop,
+    updatePitPlan,
     resolveDamage,
     resolveWeather,
     confirmPlan,

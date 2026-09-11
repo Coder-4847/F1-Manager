@@ -1113,3 +1113,127 @@ h2 {
   color: var(--text-h);
   font-variant-numeric: tabular-nums;
 }
+
+/* Damage alert flavor text */
+
+.damage-alert__flavor {
+  color: var(--text);
+  font-size: 0.85rem;
+  font-style: italic;
+  margin-bottom: 0.6rem;
+}
+
+/* Weather forecast strip (used in Racing Plan, Weather Alert, Revise Plan) */
+
+.racing-plan__field-label {
+  font-family: var(--heading);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text);
+  margin-bottom: 0.4rem;
+}
+
+.weather-forecast {
+  margin-bottom: 1.25rem;
+}
+
+.weather-forecast__bar {
+  display: flex;
+  width: 100%;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+}
+
+.weather-forecast__segment {
+  height: 100%;
+}
+
+.weather-forecast__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.9rem;
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--text);
+}
+
+.weather-forecast__legend-item {
+  white-space: nowrap;
+}
+
+/* Player controls: revise plan button, penalty status reuses damage-status colors */
+
+.player-controls__revise-plan {
+  width: 100%;
+}
+
+/* Race results */
+
+.race-results {
+  max-width: 760px;
+}
+
+.race-results__table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--panel-bg-2);
+  max-height: 420px;
+  overflow-y: auto;
+  margin: 1rem 0;
+}
+
+.race-results__row {
+  display: grid;
+  grid-template-columns: 2.5rem 1.6fr 1.2fr 5.5rem 6rem 3.5rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+
+.race-results__row:last-child {
+  border-bottom: none;
+}
+
+.race-results__row--head {
+  font-family: var(--heading);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text);
+  background: var(--bg-deep);
+}
+
+.race-results__row--dnf {
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.race-results__reason {
+  font-size: 0.75rem;
+  font-style: italic;
+  color: var(--text);
+}
+
+/* Leaderboard DNF rows */
+
+.leaderboard__row--dnf {
+  opacity: 0.6;
+}
+
+@media (max-width: 700px) {
+  .race-results__row {
+    grid-template-columns: 2rem 1fr 1fr 4.5rem 5rem 3rem;
+    font-size: 0.75rem;
+  }
+}

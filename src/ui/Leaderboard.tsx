@@ -3,9 +3,10 @@ import type { StandingsRow } from "../sim/raceEngine";
 import type { LapEvent } from "../sim/types";
 import { TireBadge } from "./TireBadge";
 
-function formatGap(seconds: number, position: number): string {
-  if (position === 1) return "Leader";
-  return `+${seconds.toFixed(1)}s`;
+function formatGap(row: StandingsRow): string {
+  if (row.car.retired) return "DNF";
+  if (row.position === 1) return "Leader";
+  return `+${row.gapToLeaderSeconds.toFixed(1)}s`;
 }
 
 export interface LeaderboardProps {
@@ -43,10 +44,11 @@ export function Leaderboard({ standings, currentLap, events }: LeaderboardProps)
             className={
               "leaderboard__row" +
               (row.car.isPlayer ? " player-row" : "") +
-              (justPitted ? " leaderboard__row--pit-flash" : "")
+              (justPitted ? " leaderboard__row--pit-flash" : "") +
+              (row.car.retired ? " leaderboard__row--dnf" : "")
             }
           >
-            <span>{row.position}</span>
+            <span>{row.car.retired ? "DNF" : row.position}</span>
             <span>
               {row.car.driver.name}
               {row.car.damageSeverity && (
@@ -62,8 +64,8 @@ export function Leaderboard({ standings, currentLap, events }: LeaderboardProps)
             <span>
               <TireBadge compound={row.car.currentCompound} tireAge={row.car.tireAge} />
             </span>
-            <span>{formatGap(row.gapToLeaderSeconds, row.position)}</span>
-            <span>{row.position === 1 ? "—" : `+${interval.toFixed(1)}s`}</span>
+            <span>{formatGap(row)}</span>
+            <span>{row.position === 1 || row.car.retired ? "—" : `+${interval.toFixed(1)}s`}</span>
             <span>{row.car.pitStopsMade}</span>
           </motion.div>
         );

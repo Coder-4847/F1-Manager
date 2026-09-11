@@ -101,10 +101,20 @@ export interface CarState {
   /** Human-readable label for the active damage (e.g. "Suspension damage"). Undefined when there's no active damage. */
   damageLabel?: string;
   damageSeverity?: DamageSeverity;
+  /** Flavor sentence describing the active damage and its effect — for the alert popup. Undefined when there's no active damage. */
+  damageDescription?: string;
+  /** true once the car has retired (mechanical/damage failure) — distinct from `finished`, which is also
+   *  set true on a retirement so the race loop stops simulating this car either way. */
+  retired?: boolean;
+  /** Human-readable reason for retirement (e.g. "Engine failure"). Undefined unless `retired`. */
+  retiredReason?: string;
+  /** Cumulative time penalties (seconds) applied this race, added directly into totalTimeSeconds — tracked
+   *  separately too so the final results screen can show it as its own column. */
+  penaltySeconds: number;
 }
 
 export interface LapEvent {
-  type: "pit-stop" | "overtake" | "damage" | "weather";
+  type: "pit-stop" | "overtake" | "damage" | "weather" | "penalty" | "retirement";
   lap: number;
   /** Empty for race-wide events (currently just "weather") that aren't tied to one car. */
   driverId: string;

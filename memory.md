@@ -306,6 +306,153 @@ src/
       no console/server errors, confirmed Reset reopens the plan modal, and
       confirmed the Load-bug fix by saving mid-race, reloading the page
       fresh, and using the new in-modal Load link to restore it correctly.
+15. **Penalties, DNF retirements, race results, and two real StrictMode bugs**
+    — a big one. In rough order:
+    - **Time penalties** (new `sim/penalties.ts`): every car rolls a small
+      per-lap chance of a 5-10s time penalty (track limits, unsafe release,
+      collision, etc.), dominated by driving mode —
+      conserve/balanced/push risk multipliers are 0.35x/1x/2.4x, with a
+      modest further scale from the driver's aggression stat. No popup for
+      these (deliberately, to avoid more interruptions) — just an event log
+      entry and a running `car.penaltySeconds` total, folded directly into
+      `naiveTotal` in `raceEngine.ts` alongside pit loss so it affects
+      battle resolution and final standings like any other time loss.
+    - **DNF retirements** (new `sim/retirement.ts`) — the race-ending
+      damage explicitly deferred in phase 13. An extremely small per-lap
+      chance, built from three additive risk contributions: active
+      unrepaired damage, a tire/weather mismatch (scaled by mismatch
+      level), and push driving mode (scaled a bit by aggression). Verified
+      by Monte Carlo (import the module directly in a dev-server browser
+      tab via `await import('/src/sim/retirement.ts')` — plain ES modules,
+      no build step needed) over 3000 trials × 55 laps: all three factors
+      together ≈3%, any single factor alone ≈0.6-1.3%, none of them
+      ≈0.13% — matches "extremely rare, barely see it, but can happen"
+      closely. `CarState` gained `retired`/`retiredReason`; a retiring car
+      gets `finished = true` too (so the existing "is the race over" check
+      needs no changes) and is skipped for the rest of that lap's
+      processing. `getStandings()` in `raceEngine.ts` now ranks retired
+      cars below every classified car (their frozen totalTimeSeconds would
+      otherwise make an early retirement look like the race leader),
+      ordered among themselves by laps completed — the standard DNF
+      convention. `completeRound()` in `season.ts` gives retired cars 0
+      points regardless of their nominal position.
+    - **Race Results screen** (`ui/RaceResults.tsx`): auto-opens (via a
+      `useEffect` watching `raceState.finished`) the moment a race ends —
+      closable, not a blocking gate like the other modals. Shows final
+      classification (DNFs sorted below finishers, with their retirement
+      reason), best lap, total time, and total penalties per driver, via a
+      new `getFinalResults()` in `raceEngine.ts` (wraps `getStandings()`
+      plus `Math.min(...car.lapTimes)`).
+    - **Fewer, more detailed popups** — three changes: (1) the damage
+      popup now only fires for major/mechanical severity, not minor (minor
+      damage still applies and shows in the leaderboard/event feed, just
+      silently); (2) the weather popup only fires when the change actually
+      invalidates the player's *current* tire (`weatherMismatch(...) >= 1`)
+      — if you're already on the right tire when conditions shift, no
+      interruption; (3) `damage.ts` damage options gained a narrative
+      `description` field per specific cause (e.g. "A knock on the front
+      wing has chipped away some front-end grip"), shown in
+      `DamageAlert.tsx` above the numeric penalty — this is what "properly
+      detail the damage... more immersive" meant. Base damage/weather-change
+      per-lap chances were also both dialed back slightly
+      (0.012→0.009, 0.01→0.008).
+    - **AI pit/push variance** (`strategy.ts`): previously, "urgent" damage
+      or weather-mismatch situations always forced an immediate AI pit.
+      Now there's a `gambleChance` (15-50%, aggression-scaled) that a car
+      stays out anyway despite the urgency, re-rolled every lap the
+      situation persists — so across a full grid you see a realistic mix
+      of some cars pitting immediately and others holding out a lap or
+      two, rather than everyone reacting in lockstep.
+    - **Weather forecast** (`generateWeatherForecast()` in `weather.ts`,
+      displayed by the new shared `ui/WeatherForecast.tsx` strip
+      component): a *preview*, not a guarantee — it runs the exact same
+      `rollForWeatherChange` transition model standalone with a throwaway
+      random source, completely independent of the race's own live weather
+      rolls. Shown in the pre-race `RacingPlan` (whole race), the
+      `WeatherAlert` popup (remaining laps, so you can see what's likely
+      coming when deciding your tire), and the new mid-race `RevisePlan`
+      screen (also remaining laps, regenerated fresh every time it opens —
+      this is the "updated forecast readings" the player can act on).
+      Deliberately *not* a scripted/predetermined race weather timeline:
+      the actual weather still rolls live and independently lap by lap
+      (unchanged from phase 14), so a forecast can turn out wrong, same as
+      real weather — the point of `RevisePlan` is exactly to let the
+      player react when live conditions diverge from what was forecast.
+    - **Mid-race Revise Plan** (`ui/RevisePlan.tsx`): a non-blocking
+      (closable, calls `pause()` on open rather than hard-gating) screen
+      reachable any time during a race via a new "Revise Plan (Forecast)"
+      button in `PlayerControls.tsx`. Lets the player replace their entire
+      remaining pit-stop schedule (not just the single next stop
+      `queuePlayerPitStop` supports) — new `setPlayerPitPlan()` in
+      `raceEngine.ts` and `updatePitPlan()` in `useRace.ts`.
+    - **Bug #1 — the reported "lap counter jumps in 2s"**: root cause was
+      `useRace.ts`'s `step()` calling `simulateLap(prev)` (which mutates
+      its argument) directly inside a `setRaceState(prev => ...)`
+      functional updater. React StrictMode (`main.tsx` wraps `<App/>` in
+      `<StrictMode>`) intentionally calls updater functions **twice** in
+      development to catch exactly this kind of impurity; since both calls
+      received the *same* `prev` reference and the first call already
+      mutated it, the second call mutated an already-incremented lap
+      counter, advancing by 2 per tick. Only manifests in dev
+      (`npm run dev` — production builds skip StrictMode's double-invoke),
+      which is presumably why the user saw it but it was never caught by
+      the production-build checks run after every phase so far. Fixed by
+      `structuredClone`-ing `prev` before mutating — confirmed safe since
+      `RaceState`/`CarState` are plain JSON-safe data with no functions or
+      class instances (the same property `persistence.ts` already relies
+      on for localStorage save/load). Applied the same clone-before-mutate
+      pattern to every other `setRaceState` updater in the file for
+      consistency, even though those are individually idempotent (setting
+      the same driving mode/pit plan twice is harmless) and so weren't
+      actually causing bugs on their own.
+    - **Bug #2 — phantom weather/damage alerts (found *while verifying
+      the fix above*, in-browser)**: after the `structuredClone` fix, the
+      lap counter was correct, but a weather alert popup fired once even
+      though the player's current tire already matched the new weather
+      (mismatch 0) — contradicting the just-added gating logic. Root
+      cause: `step()` was calling `setWeatherAlert(true)`/
+      `setDamageAlert(true)`/`setPlaying(false)` as *side effects from
+      inside* the updater. Because StrictMode's two calls use independent
+      `Math.random()` draws (only the clone is shared, not the randomness),
+      the two calls can simulate genuinely different lap outcomes — e.g.
+      call 1 rolls a weather change that mismatches and fires
+      `setWeatherAlert(true)`, call 2 (the one whose *return value* React
+      actually keeps) rolls no change at all. The side effect from the
+      discarded call 1 still lands in React state, popping an alert for an
+      event that never actually happened in the committed race history.
+      Fixed by moving all alert-detection out of the updater entirely and
+      into a separate `useEffect` that reacts only to the *committed*
+      `raceState` — effects aren't re-run for a discarded StrictMode render
+      the way updaters are. Added a `lastCheckedLapRef` guard so the effect
+      only evaluates a given lap once (otherwise an unrelated re-render
+      while sitting on the same lap — e.g. changing driving mode — would
+      re-scan that lap's already-handled events and could re-alert).
+      **Lesson for future sessions**: never call other `setX` functions as
+      side effects from inside a `setState(prev => ...)` updater,
+      especially one that calls into non-deterministic logic — StrictMode
+      may invoke it more than once with outcomes that diverge from what
+      actually gets committed. Decide side effects from the committed
+      state in an effect instead.
+    - Bumped the season-save key to `f1-manager-save-v5` (`CarState`
+      gained `penaltySeconds`, required — an old save's missing field
+      would propagate `NaN` through total-time math — plus
+      `retired`/`retiredReason`/`damageDescription`).
+    - Verified in-browser (twice, after finding and fixing both StrictMode
+      bugs above, in a fresh tab the second time — an HMR-battered dev tab
+      can accumulate stale Fast-Refresh state that produces misleading
+      "hook order changed" console errors unrelated to the actual code;
+      worth remembering, don't chase that particular error without first
+      trying a genuinely fresh tab): stepped single laps to confirm exact
+      +1 increments; ran a 100-lap push-mode custom race end to end with
+      zero console/server errors — minor damage applied silently (no
+      popup), a real hard-tires-in-damp mismatch correctly popped the
+      weather alert, pitting for intermediates and continuing for 40+
+      further laps produced no further (phantom) alerts, 11 penalty events
+      accumulated (push mode) with the total correctly reflected in the
+      final results screen (+20s for the player), Race Results auto-opened
+      exactly at lap 100 with correct best-lap/total-time/penalty
+      formatting, and a save/load round-trip through the new v5 schema
+      restored everything correctly.
 
 ## A real bug that was found and fixed (worth knowing about)
 

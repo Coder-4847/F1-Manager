@@ -67,7 +67,7 @@ export function completeRound(season: SeasonState, standings: StandingsRow[]): S
   const roundStandings = standings.map((row) => ({
     driverId: row.car.driver.id,
     position: row.position,
-    points: pointsForPosition(row.position),
+    points: row.car.retired ? 0 : pointsForPosition(row.position),
   }));
 
   const driverPoints = { ...season.driverPoints };

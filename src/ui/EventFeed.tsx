@@ -5,6 +5,8 @@ const ICON: Record<LapEvent["type"], string> = {
   overtake: "⏩",
   damage: "💥",
   weather: "🌦",
+  penalty: "🚩",
+  retirement: "🏳",
 };
 
 export function EventFeed({ events }: { events: LapEvent[] }) {

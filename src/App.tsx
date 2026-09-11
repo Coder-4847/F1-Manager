@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 import { drivers, getDefaultProfile, getTeam, updateDriverProfile } from "./sim/roster";
 import type { DriverProfileEdit } from "./sim/roster";
+import { getFinalResults } from "./sim/raceEngine";
 import { useSeason } from "./state/useSeason";
 import { applyStoredDriverProfile, saveDriverProfile } from "./state/driverProfile";
 import { Leaderboard } from "./ui/Leaderboard";
@@ -15,6 +16,8 @@ import { SeasonSetup } from "./ui/SeasonSetup";
 import { DamageAlert } from "./ui/DamageAlert";
 import { WeatherAlert } from "./ui/WeatherAlert";
 import { RacingPlan } from "./ui/RacingPlan";
+import { RevisePlan } from "./ui/RevisePlan";
+import { RaceResults } from "./ui/RaceResults";
 import type { InitialStrategy } from "./sim/strategy";
 import type { SeasonRound } from "./sim/season";
 import type { WeatherCondition } from "./sim/types";
@@ -66,6 +69,7 @@ function App() {
     setDrivingMode,
     queuePitStop,
     cancelPitStop,
+    updatePitPlan,
     resolveDamage,
     resolveWeather,
     confirmPlan,
@@ -75,6 +79,13 @@ function App() {
 
   const [showProfileEditor, setShowProfileEditor] = useState(false);
   const [showSeasonSetup, setShowSeasonSetup] = useState(false);
+  const [showRevisePlan, setShowRevisePlan] = useState(false);
+  const [showRaceResults, setShowRaceResults] = useState(false);
+
+  // Surfaces the final classification automatically the moment a race finishes.
+  useEffect(() => {
+    if (raceState.finished) setShowRaceResults(true);
+  }, [raceState.finished]);
 
   const playerDriver = drivers.find((d) => d.id === PLAYER_DRIVER_ID)!;
   const playerTeam = getTeam(playerDriver.teamId);
@@ -91,6 +102,11 @@ function App() {
   const handleStartCustomSeason = (calendar: SeasonRound[]) => {
     startCustomSeason(calendar);
     setShowSeasonSetup(false);
+  };
+
+  const handleOpenRevisePlan = () => {
+    pause();
+    setShowRevisePlan(true);
   };
 
   return (
@@ -144,6 +160,7 @@ function App() {
         <RacingPlan
           trackName={track.name}
           totalLaps={track.totalLaps}
+          startWeather={raceState.weather}
           initialPlan={{
             startingCompound: playerCar.currentCompound,
             drivingMode: playerCar.drivingMode,
@@ -159,6 +176,8 @@ function App() {
         <WeatherAlert
           weather={raceState.weather}
           car={playerCar}
+          currentLap={raceState.currentLap}
+          totalLaps={track.totalLaps}
           onPit={(compound) => resolveWeather("pit", compound)}
           onPush={() => resolveWeather("push")}
         />
@@ -169,6 +188,29 @@ function App() {
           car={playerCar}
           onPit={() => resolveDamage("pit")}
           onPush={() => resolveDamage("push")}
+        />
+      )}
+
+      {showRevisePlan && playerCar && (
+        <RevisePlan
+          trackName={track.name}
+          currentLap={raceState.currentLap}
+          totalLaps={track.totalLaps}
+          weather={raceState.weather}
+          currentPitPlan={playerCar.pitPlan}
+          onSave={(stops) => {
+            updatePitPlan(stops);
+            setShowRevisePlan(false);
+          }}
+          onClose={() => setShowRevisePlan(false)}
+        />
+      )}
+
+      {showRaceResults && raceState.finished && (
+        <RaceResults
+          trackName={track.name}
+          results={getFinalResults(raceState)}
+          onClose={() => setShowRaceResults(false)}
         />
       )}
 
@@ -199,8 +241,14 @@ function App() {
 
       {playerStanding && (
         <div className="player-summary">
-          P{playerStanding.position} &middot;{" "}
-          {playerStanding.position === 1 ? "Leader" : `+${playerStanding.gapToLeaderSeconds.toFixed(1)}s`}
+          {playerStanding.car.retired ? (
+            "DNF"
+          ) : (
+            <>
+              P{playerStanding.position} &middot;{" "}
+              {playerStanding.position === 1 ? "Leader" : `+${playerStanding.gapToLeaderSeconds.toFixed(1)}s`}
+            </>
+          )}
         </div>
       )}
 
@@ -236,6 +284,7 @@ function App() {
                 onSetDrivingMode={setDrivingMode}
                 onQueuePitStop={queuePitStop}
                 onCancelPitStop={cancelPitStop}
+                onOpenRevisePlan={handleOpenRevisePlan}
               />
             </section>
           )}

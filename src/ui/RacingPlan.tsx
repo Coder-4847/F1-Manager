@@ -1,6 +1,8 @@
 import { useState } from "react";
-import type { DrivingMode, PitStopPlan, TireCompound } from "../sim/types";
+import type { DrivingMode, PitStopPlan, TireCompound, WeatherCondition } from "../sim/types";
 import type { InitialStrategy } from "../sim/strategy";
+import { generateWeatherForecast } from "../sim/weather";
+import { WeatherForecast } from "./WeatherForecast";
 
 const COMPOUNDS: TireCompound[] = ["soft", "medium", "hard", "intermediate", "wet"];
 const COMPOUND_LABEL: Record<TireCompound, string> = {
@@ -15,6 +17,7 @@ const MODES: DrivingMode[] = ["conserve", "balanced", "push"];
 export interface RacingPlanProps {
   trackName: string;
   totalLaps: number;
+  startWeather: WeatherCondition;
   initialPlan: InitialStrategy;
   onStart: (plan: InitialStrategy) => void;
   /** When set, a saved game exists — offer a way out of planning a race that's about to be replaced by it. */
@@ -22,9 +25,19 @@ export interface RacingPlanProps {
   onLoad?: () => void;
 }
 
-export function RacingPlan({ trackName, totalLaps, initialPlan, onStart, hasSave, onLoad }: RacingPlanProps) {
+export function RacingPlan({
+  trackName,
+  totalLaps,
+  startWeather,
+  initialPlan,
+  onStart,
+  hasSave,
+  onLoad,
+}: RacingPlanProps) {
   const [compound, setCompound] = useState<TireCompound>(initialPlan.startingCompound);
   const [mode, setMode] = useState<DrivingMode>(initialPlan.drivingMode);
+  // Generated once when the screen opens — a preview, not a guarantee (see generateWeatherForecast).
+  const [forecast] = useState(() => generateWeatherForecast(startWeather, totalLaps));
   // Clamp the incoming default (e.g. the app's placeholder plan) to this specific race's
   // length — a short custom race could otherwise start with a pit lap past the finish.
   const [pitPlan, setPitPlan] = useState<PitStopPlan[]>(() =>
@@ -71,6 +84,9 @@ export function RacingPlan({ trackName, totalLaps, initialPlan, onStart, hasSave
         <p className="racing-plan__track">
           {trackName} &middot; {totalLaps} laps
         </p>
+
+        <div className="racing-plan__field-label">Weather Forecast</div>
+        <WeatherForecast forecast={forecast} startLap={1} />
 
         <div className="racing-plan__row">
           <div className="driver-profile__field">

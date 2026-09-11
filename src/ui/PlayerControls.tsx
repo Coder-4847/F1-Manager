@@ -18,6 +18,7 @@ export interface PlayerControlsProps {
   onSetDrivingMode: (mode: DrivingMode) => void;
   onQueuePitStop: (lap: number, compound: TireCompound) => void;
   onCancelPitStop: () => void;
+  onOpenRevisePlan: () => void;
 }
 
 export function PlayerControls({
@@ -26,6 +27,7 @@ export function PlayerControls({
   onSetDrivingMode,
   onQueuePitStop,
   onCancelPitStop,
+  onOpenRevisePlan,
 }: PlayerControlsProps) {
   const [selectedCompound, setSelectedCompound] = useState<TireCompound>("medium");
   const pendingStop = car.pitPlan[0];
@@ -43,6 +45,13 @@ export function PlayerControls({
           <div className={`damage-status damage-status--${car.damageSeverity}`}>
             {car.damageLabel} &middot; -{car.damagePenaltySeconds.toFixed(1)}s/lap
           </div>
+        </div>
+      )}
+
+      {car.penaltySeconds > 0 && (
+        <div className="player-controls__row">
+          <div className="player-controls__label">Time penalties</div>
+          <div className="damage-status damage-status--major">+{car.penaltySeconds}s total</div>
         </div>
       )}
 
@@ -92,6 +101,12 @@ export function PlayerControls({
             </button>
           )}
         </div>
+      </div>
+
+      <div className="player-controls__row">
+        <button className="player-controls__revise-plan" onClick={onOpenRevisePlan} disabled={car.finished}>
+          Revise Plan (Forecast)
+        </button>
       </div>
     </div>
   );
