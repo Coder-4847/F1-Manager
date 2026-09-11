@@ -18,6 +18,8 @@ export interface RacingPlanProps {
   trackName: string;
   totalLaps: number;
   startWeather: WeatherCondition;
+  /** Where the player qualified — shown as a small info line if provided. */
+  startingGridPosition?: number;
   initialPlan: InitialStrategy;
   onStart: (plan: InitialStrategy) => void;
   /** When set, a saved game exists — offer a way out of planning a race that's about to be replaced by it. */
@@ -29,6 +31,7 @@ export function RacingPlan({
   trackName,
   totalLaps,
   startWeather,
+  startingGridPosition,
   initialPlan,
   onStart,
   hasSave,
@@ -83,6 +86,7 @@ export function RacingPlan({
         </div>
         <p className="racing-plan__track">
           {trackName} &middot; {totalLaps} laps
+          {startingGridPosition && <> &middot; Qualified P{startingGridPosition}</>}
         </p>
 
         <div className="racing-plan__field-label">Weather Forecast</div>

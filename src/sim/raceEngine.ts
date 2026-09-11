@@ -38,12 +38,34 @@ function createCarState(driver: Driver, isPlayer: boolean, strategy: InitialStra
   };
 }
 
+/**
+ * A quick one-lap qualifying simulation — no tire wear or fuel, just combined car/driver
+ * pace plus a modest random variance (so it's not a pure stat-sheet ranking every time),
+ * returning driver ids fastest to slowest. This decides the starting grid; without it,
+ * lap 1 order was arbitrary (roster order), which made every race play out the same way.
+ */
+function runQualifying(random: () => number): string[] {
+  return [...drivers]
+    .map((driver) => {
+      const team = getTeam(driver.teamId);
+      const pace = 0.5 * team.carPerformance + 0.5 * driver.stats.pace + (random() - 0.5) * 6;
+      return { id: driver.id, pace };
+    })
+    .sort((a, b) => b.pace - a.pace)
+    .map((entry) => entry.id);
+}
+
 export function setupRace(setup: RaceSetup): RaceState {
   const random = setup.random ?? Math.random;
+  const gridOrder = runQualifying(random);
   const cars: CarState[] = drivers.map((driver) => {
     const isPlayer = driver.id === setup.playerDriverId;
     const strategy = isPlayer ? setup.playerStrategy : generateAIStrategy(driver, setup.track, random);
-    return createCarState(driver, isPlayer, strategy);
+    const car = createCarState(driver, isPlayer, strategy);
+    // A tiny, race-irrelevant time offset by grid slot — just enough to break the lap-0
+    // "everyone's at 0.0s" tie in qualifying order instead of arbitrary roster order.
+    car.totalTimeSeconds = gridOrder.indexOf(driver.id) * 0.001;
+    return car;
   });
 
   return {

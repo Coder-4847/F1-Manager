@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { CarState, DrivingMode, TireCompound } from "../sim/types";
 import { TireBadge } from "./TireBadge";
+import { CarHealthIndicator } from "./CarHealthIndicator";
 
 const MODES: DrivingMode[] = ["conserve", "balanced", "push"];
 const COMPOUNDS: TireCompound[] = ["soft", "medium", "hard", "intermediate", "wet"];
@@ -35,6 +36,16 @@ export function PlayerControls({
   return (
     <div className="player-controls">
       <div className="player-controls__row">
+        <div className="player-controls__label">Car condition</div>
+        <div className="car-condition">
+          <CarHealthIndicator severity={car.damageSeverity} />
+          <span className={car.damageSeverity ? `damage-status damage-status--${car.damageSeverity}` : "car-condition__ok"}>
+            {car.damageSeverity ? car.damageLabel : "No damage"}
+          </span>
+        </div>
+      </div>
+
+      <div className="player-controls__row">
         <div className="player-controls__label">Your tires</div>
         <TireBadge compound={car.currentCompound} tireAge={car.tireAge} />
       </div>
@@ -43,7 +54,7 @@ export function PlayerControls({
         <div className="player-controls__row">
           <div className="player-controls__label">Damage</div>
           <div className={`damage-status damage-status--${car.damageSeverity}`}>
-            {car.damageLabel} &middot; -{car.damagePenaltySeconds.toFixed(1)}s/lap
+            {car.damageDescription ?? car.damageLabel} &middot; -{car.damagePenaltySeconds.toFixed(1)}s/lap
           </div>
         </div>
       )}

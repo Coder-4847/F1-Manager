@@ -453,6 +453,88 @@ src/
       exactly at lap 100 with correct best-lap/total-time/penalty
       formatting, and a save/load round-trip through the new v5 schema
       restored everything correctly.
+16. **Main menu, live forecast visibility, qualifying, louder popups, and a
+    visual damage indicator** — user feedback after playing phase 15's
+    build: the single game screen felt cluttered, the forecast was buried
+    behind a click, only 1 popup showed up in a 53-lap race (wanted ~3),
+    the damage popup wasn't detailed/visual enough, and the game "felt
+    incomplete" without being able to say exactly why.
+    - **Main menu** (`ui/MainMenu.tsx`): the app now opens to a full-screen
+      menu (`showMenu` state in `App.tsx`, `true` on mount) with Play/
+      Resume (label depends on `!planPending`, i.e. whether a race has
+      already been configured), Custom Season, Edit Driver, and Load Saved
+      Game (only shown when `hasSave`). The in-game header's two buttons
+      got replaced with a single "Menu" button (`pause()` then
+      `setShowMenu(true)`) — decluttering was the explicit ask, so
+      Custom Season/Edit Driver are reachable only via the menu now, not
+      from mid-race. `DriverProfile`/`SeasonSetup` render as siblings
+      outside the menu-vs-game branch so they can open from either
+      context; starting a custom season or loading a save also dismisses
+      the menu.
+    - **Live weather forecast** (sidebar section in `App.tsx`, using the
+      existing `WeatherForecast` component and `generateWeatherForecast`):
+      previously the forecast only existed inside modals you had to
+      actively open (Racing Plan, a weather alert, or Revise Plan) — "I
+      don't see the place to check the live forecast" was a real gap. Now
+      a "Weather Forecast" section sits in the sidebar at all times during
+      a race, showing the next 15 laps, regenerated via `useMemo` keyed on
+      `currentLap`/`weather` (once per lap, not every render, so it stays
+      visually stable within a lap).
+    - **Qualifying**: `raceEngine.ts` gained `runQualifying()` — a
+      one-lap-equivalent sim (combined car/driver pace plus ±3 random
+      variance, no tire wear/fuel) run once in `setupRace()`, fastest to
+      slowest. Grid order is applied as a tiny per-position time offset
+      (position × 0.001s) on top of each car's starting `totalTimeSeconds`
+      — enough to break the lap-0 "everyone's tied at 0.0s" sort
+      deterministically in qualifying order, negligible against real
+      race-time deltas everywhere else. This was `memory.md`'s own
+      "known limitation" (lap-1 order was arbitrary roster order) and is
+      the main answer to "why does this feel incomplete" — starting
+      position now actually matters, and the player sees exactly where
+      they qualified (`RacingPlan` shows "Qualified P{n}", sourced from
+      `playerStanding` at lap 0 — no new state needed, it falls out of the
+      grid-offset sort for free).
+    - **Louder popups**: `DAMAGE_CHANCE_PER_LAP` 0.009→0.02 and its
+      minor/major split shifted from 70/25/5% to 50/45/5% (so major+
+      mechanical — the popup-worthy tiers — went from 30% to 50% of
+      events); `WEATHER_CHANGE_CHANCE_PER_LAP` 0.008→0.022. Together,
+      roughly triples the expected popup count over a full race. Verified
+      in-browser: 4 popups (3 damage, 1 weather) in one 53-lap race,
+      against the user's target of "~3" — close, and randomness means any
+      one race will vary either side of that.
+    - **Car damage visual** (`ui/CarHealthIndicator.tsx`): a small
+      schematic top-down car silhouette (plain SVG shapes — body, wings,
+      wheels — not an illustration, matching the app's existing clean
+      data-viz aesthetic rather than attempting photorealism) that
+      recolors green → orange → red exactly as the user described:
+      no-damage green, minor-or-major damage orange (deliberately not
+      distinguishing the two shades — the accompanying text already says
+      exactly what's wrong; the icon is for an ambient at-a-glance read),
+      mechanical red. Shown always-visible in the Strategy panel
+      (`PlayerControls.tsx`, new "Car Condition" row) and prominently in
+      the `DamageAlert` popup itself, alongside the existing
+      `damageDescription` flavor text from phase 15 (also now reused as
+      the damage-row detail line in `PlayerControls`, not just the popup).
+    - Deliberately **not** built this round, flagged instead as natural
+      next steps if the user wants to keep going: a safety car / VSC
+      system tied to retirements (bunches the field, creates a strategic
+      cheap-pit-stop window — classic source of race drama this sim
+      doesn't have yet) and car development/budget progression across a
+      season (the other hallmark "F1 Manager" feature, but a genuinely
+      large addition — a budget currency, upgrade choices, persistence —
+      not something to bolt on without discussing scope first).
+    - Verified in-browser end to end: menu → Play → RacingPlan showing
+      "Qualified P4" and a real varied forecast (dry → damp → wet) → set
+      pit stops around that forecast → started, confirmed grid order in
+      the lap-0 leaderboard and player-summary both read P4 → hit a damage
+      popup showing the orange car icon, label, and flavor description →
+      confirmed the same orange indicator + description persisted in the
+      Strategy panel after dismissing → opened Menu mid-race (button
+      correctly read "Resume") → resumed at the exact lap it paused on →
+      ran to completion picking up 4 total popups and 0 console errors →
+      confirmed Race Results, then separately re-verified Edit
+      Driver/Custom Season both still open correctly over the menu and
+      return to it on cancel.
 
 ## A real bug that was found and fixed (worth knowing about)
 
@@ -473,12 +555,14 @@ through the exact crash point with zero errors afterward.
   hand-shaped for recognizable character, the other 8 are procedurally
   generated (varied but not bespoke). More could be hand-authored if wanted.
 - No sound/audio.
-- No qualifying/grid order — lap 1 order is arbitrary (roster order), not
-  based on any pace ranking.
 - Single continuous session only — no multiplayer, no cloud save, just one
   localStorage slot per browser.
 - Battle/overtake resolution is a heuristic model, not physics — tuned to
   "feel fair," not validated against real telemetry.
+- No safety car/VSC periods and no car development/budget progression
+  across a season — both flagged in phase 16 as natural next steps if the
+  user wants more depth, deliberately not built without discussing scope
+  (development/budget especially is a genuinely large addition).
 
 ## Working style notes for whoever picks this up
 

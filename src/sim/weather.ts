@@ -46,7 +46,9 @@ export function weatherLabel(weather: WeatherCondition): string {
   return "Wet";
 }
 
-const WEATHER_CHANGE_CHANCE_PER_LAP = 0.008;
+// Tuned alongside DAMAGE_CHANCE_PER_LAP for roughly 2-3 total alert popups over a full
+// ~55-lap race — up from an earlier, noticeably-too-quiet tuning.
+const WEATHER_CHANGE_CHANCE_PER_LAP = 0.022;
 
 /** Possible next states from each condition, weighted — a step to the adjacent state is
  *  far more likely than a "drastic" jump straight from dry to wet or back. */

@@ -1,4 +1,5 @@
 import type { CarState } from "../sim/types";
+import { CarHealthIndicator } from "./CarHealthIndicator";
 
 const SEVERITY_LABEL: Record<string, string> = {
   minor: "Minor Damage",
@@ -20,6 +21,7 @@ export function DamageAlert({ car, onPit, onPush }: DamageAlertProps) {
         <div className={`damage-alert__badge damage-alert__badge--${severity}`}>
           {SEVERITY_LABEL[severity]}
         </div>
+        <CarHealthIndicator severity={car.damageSeverity} className="damage-alert__car" />
         <h2>{car.damageLabel}</h2>
         {car.damageDescription && <p className="damage-alert__flavor">{car.damageDescription}</p>}
         <p className="damage-alert__desc">

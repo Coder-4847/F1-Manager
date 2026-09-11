@@ -44,10 +44,12 @@ const MECHANICAL_OPTIONS: DamageOption[] = [
   },
 ];
 
-/** Base per-lap chance of picking up new damage — deliberately low, this should feel like an occasional event, not a constant threat. */
-const DAMAGE_CHANCE_PER_LAP = 0.009;
+/** Base per-lap chance of picking up new damage — an occasional event, not a constant
+ *  threat, but tuned (alongside the weather-change chance) to land a player at roughly
+ *  2-3 alert popups over a full ~55-lap race rather than 1. */
+const DAMAGE_CHANCE_PER_LAP = 0.02;
 /** Cumulative severity thresholds once a damage roll succeeds: below MINOR -> minor, below MAJOR -> major, above -> mechanical (rarer still). */
-const MINOR_THRESHOLD = 0.7;
+const MINOR_THRESHOLD = 0.5;
 const MAJOR_THRESHOLD = 0.95;
 
 const SEVERITY_RANK: Record<DamageSeverity, number> = { minor: 1, major: 2, mechanical: 3 };

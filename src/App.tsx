@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 import { drivers, getDefaultProfile, getTeam, updateDriverProfile } from "./sim/roster";
 import type { DriverProfileEdit } from "./sim/roster";
 import { getFinalResults } from "./sim/raceEngine";
+import { generateWeatherForecast } from "./sim/weather";
 import { useSeason } from "./state/useSeason";
 import { applyStoredDriverProfile, saveDriverProfile } from "./state/driverProfile";
 import { Leaderboard } from "./ui/Leaderboard";
@@ -18,9 +19,13 @@ import { WeatherAlert } from "./ui/WeatherAlert";
 import { RacingPlan } from "./ui/RacingPlan";
 import { RevisePlan } from "./ui/RevisePlan";
 import { RaceResults } from "./ui/RaceResults";
+import { MainMenu } from "./ui/MainMenu";
+import { WeatherForecast } from "./ui/WeatherForecast";
 import type { InitialStrategy } from "./sim/strategy";
 import type { SeasonRound } from "./sim/season";
 import type { WeatherCondition } from "./sim/types";
+
+const FORECAST_LOOKAHEAD_LAPS = 15;
 
 const WEATHER_ICON: Record<WeatherCondition, string> = { dry: "☀", damp: "🌥", wet: "🌧" };
 const WEATHER_LABEL: Record<WeatherCondition, string> = { dry: "Dry", damp: "Damp", wet: "Wet" };
@@ -77,10 +82,22 @@ function App() {
 
   const blocked = damageAlert || weatherAlert || planPending;
 
+  const [showMenu, setShowMenu] = useState(true);
   const [showProfileEditor, setShowProfileEditor] = useState(false);
   const [showSeasonSetup, setShowSeasonSetup] = useState(false);
   const [showRevisePlan, setShowRevisePlan] = useState(false);
   const [showRaceResults, setShowRaceResults] = useState(false);
+
+  // Regenerated once per lap (not every render) — a preview, not a guarantee, same as
+  // the one shown pre-race and in the weather alert; see generateWeatherForecast.
+  const liveForecast = useMemo(
+    () =>
+      generateWeatherForecast(
+        raceState.weather,
+        Math.min(FORECAST_LOOKAHEAD_LAPS, Math.max(0, raceState.track.totalLaps - raceState.currentLap))
+      ),
+    [raceState.currentLap, raceState.weather, raceState.track.totalLaps]
+  );
 
   // Surfaces the final classification automatically the moment a race finishes.
   useEffect(() => {
@@ -102,12 +119,64 @@ function App() {
   const handleStartCustomSeason = (calendar: SeasonRound[]) => {
     startCustomSeason(calendar);
     setShowSeasonSetup(false);
+    setShowMenu(false);
   };
 
   const handleOpenRevisePlan = () => {
     pause();
     setShowRevisePlan(true);
   };
+
+  const handleOpenMenu = () => {
+    pause();
+    setShowMenu(true);
+  };
+
+  const handleLoadFromMenu = () => {
+    loadProgress();
+    setShowMenu(false);
+  };
+
+  if (showMenu) {
+    return (
+      <>
+        <MainMenu
+          hasStartedRace={!planPending}
+          roundNumber={roundNumber}
+          totalRounds={season.calendar.length}
+          seasonComplete={seasonComplete}
+          hasSave={hasSave}
+          onPlay={() => setShowMenu(false)}
+          onCustomSeason={() => setShowSeasonSetup(true)}
+          onEditDriver={() => setShowProfileEditor(true)}
+          onLoad={handleLoadFromMenu}
+        />
+
+        {showProfileEditor && (
+          <DriverProfile
+            teamName={playerTeam.name}
+            profile={{
+              name: playerDriver.name,
+              age: playerDriver.age!,
+              nationality: playerDriver.nationality!,
+              number: playerDriver.number!,
+            }}
+            onSave={handleSaveProfile}
+            onResetToDefault={() => getDefaultProfile(PLAYER_DRIVER_ID)}
+            onClose={() => setShowProfileEditor(false)}
+          />
+        )}
+
+        {showSeasonSetup && (
+          <SeasonSetup
+            initialCalendar={season.calendar}
+            onStart={handleStartCustomSeason}
+            onClose={() => setShowSeasonSetup(false)}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <div className="app">
@@ -119,8 +188,7 @@ function App() {
             Round {roundNumber}/{season.calendar.length}
           </span>
           <div className="app__header-actions">
-            <button onClick={() => setShowSeasonSetup(true)}>Custom Season</button>
-            <button onClick={() => setShowProfileEditor(true)}>Edit Driver</button>
+            <button onClick={handleOpenMenu}>Menu</button>
           </div>
         </div>
         <p className="subtitle">
@@ -133,34 +201,12 @@ function App() {
         </p>
       </header>
 
-      {showProfileEditor && (
-        <DriverProfile
-          teamName={playerTeam.name}
-          profile={{
-            name: playerDriver.name,
-            age: playerDriver.age!,
-            nationality: playerDriver.nationality!,
-            number: playerDriver.number!,
-          }}
-          onSave={handleSaveProfile}
-          onResetToDefault={() => getDefaultProfile(PLAYER_DRIVER_ID)}
-          onClose={() => setShowProfileEditor(false)}
-        />
-      )}
-
-      {showSeasonSetup && (
-        <SeasonSetup
-          initialCalendar={season.calendar}
-          onStart={handleStartCustomSeason}
-          onClose={() => setShowSeasonSetup(false)}
-        />
-      )}
-
       {planPending && playerCar && (
         <RacingPlan
           trackName={track.name}
           totalLaps={track.totalLaps}
           startWeather={raceState.weather}
+          startingGridPosition={playerStanding?.position}
           initialPlan={{
             startingCompound: playerCar.currentCompound,
             drivingMode: playerCar.drivingMode,
@@ -275,6 +321,15 @@ function App() {
         </section>
 
         <aside className="layout__side">
+          <section>
+            <h2>Weather Forecast</h2>
+            {liveForecast.length > 0 ? (
+              <WeatherForecast forecast={liveForecast} startLap={raceState.currentLap + 1} />
+            ) : (
+              <p className="season-setup__empty">No further laps to forecast.</p>
+            )}
+          </section>
+
           {playerCar && (
             <section>
               <h2>Strategy</h2>
