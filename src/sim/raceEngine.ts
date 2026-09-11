@@ -1,4 +1,4 @@
-import type { CarState, Driver, LapEvent, PitStopPlan, RaceState, Track } from "./types";
+import type { CarState, Driver, DrivingMode, LapEvent, PitStopPlan, RaceState, TireCompound, Track } from "./types";
 import type { InitialStrategy } from "./strategy";
 import { calculateLapTime } from "./lapTime";
 import { pitStopTimeLoss } from "./pitStop";
@@ -48,9 +48,17 @@ export function setupRace(setup: RaceSetup): RaceState {
   };
 }
 
+function orderByTime(state: RaceState): string[] {
+  return [...state.cars]
+    .sort((a, b) => a.totalTimeSeconds - b.totalTimeSeconds)
+    .map((c) => c.driver.id);
+}
+
 /** Advances every car by exactly one lap, mutating and returning the same RaceState. */
 export function simulateLap(state: RaceState, random: () => number = Math.random): RaceState {
   if (state.finished) return state;
+
+  const orderBefore = orderByTime(state);
 
   state.currentLap += 1;
   const lapEvents: LapEvent[] = [];
@@ -91,6 +99,21 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
     }
   }
 
+  const orderAfter = orderByTime(state);
+  const driverById = new Map(state.cars.map((c) => [c.driver.id, c]));
+  orderAfter.forEach((driverId, afterIndex) => {
+    const beforeIndex = orderBefore.indexOf(driverId);
+    if (beforeIndex !== -1 && afterIndex < beforeIndex) {
+      const car = driverById.get(driverId)!;
+      lapEvents.push({
+        type: "position-change",
+        lap: state.currentLap,
+        driverId,
+        message: `${car.driver.name} moves up to P${afterIndex + 1}`,
+      });
+    }
+  });
+
   state.events.push(...lapEvents);
 
   if (state.cars.every((c) => c.finished)) {
@@ -98,6 +121,32 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
   }
 
   return state;
+}
+
+function getPlayerCar(state: RaceState): CarState | undefined {
+  return state.cars.find((c) => c.isPlayer);
+}
+
+/** Changes the player car's driving mode with immediate effect from the next simulated lap. */
+export function setPlayerDrivingMode(state: RaceState, mode: DrivingMode): void {
+  const car = getPlayerCar(state);
+  if (car) car.drivingMode = mode;
+}
+
+/**
+ * Replaces the player car's pending pit stop queue with a single stop on the given lap.
+ * Only one pending stop is tracked at a time in Phase 2 — calling this again before the
+ * scheduled lap overrides it (e.g. changing your mind about the compound).
+ */
+export function queuePlayerPitStop(state: RaceState, lap: number, compound: TireCompound): void {
+  const car = getPlayerCar(state);
+  if (car) car.pitPlan = [{ lap, compound }];
+}
+
+/** Clears any pending (not-yet-executed) pit stop for the player car. */
+export function cancelPlayerPitStop(state: RaceState): void {
+  const car = getPlayerCar(state);
+  if (car) car.pitPlan = [];
 }
 
 export function runFullRace(state: RaceState, random: () => number = Math.random): RaceState {

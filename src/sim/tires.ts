@@ -26,6 +26,22 @@ export const tireCompounds: Record<TireCompound, TireCompoundDef> = {
 };
 
 /**
+ * Reference lap count at which a compound is considered "fully worn" for display
+ * purposes only — does not affect lap time math, just how the UI wear bar fills.
+ */
+const DISPLAY_WEAR_REFERENCE_LAPS: Record<TireCompound, number> = {
+  soft: 20,
+  medium: 28,
+  hard: 38,
+};
+
+/** 0-100 wear percentage for UI display, based on tire age vs. a reference stint length. */
+export function tireWearPercent(compound: TireCompound, tireAge: number): number {
+  const reference = DISPLAY_WEAR_REFERENCE_LAPS[compound];
+  return Math.min(100, Math.round((tireAge / reference) * 100));
+}
+
+/**
  * Lap time penalty (seconds) from tire wear at a given tire age (laps on this set).
  * `wearFactor` scales for track severity (0-1+), `managementFactor` scales down
  * wear for well-managed tires (derived from driver.tireManagement, 0-1 where

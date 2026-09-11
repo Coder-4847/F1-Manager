@@ -1,0 +1,82 @@
+import { useState } from "react";
+import type { CarState, DrivingMode, TireCompound } from "../sim/types";
+import { TireBadge } from "./TireBadge";
+
+const MODES: DrivingMode[] = ["conserve", "balanced", "push"];
+const COMPOUNDS: TireCompound[] = ["soft", "medium", "hard"];
+
+export interface PlayerControlsProps {
+  car: CarState;
+  currentLap: number;
+  onSetDrivingMode: (mode: DrivingMode) => void;
+  onQueuePitStop: (lap: number, compound: TireCompound) => void;
+  onCancelPitStop: () => void;
+}
+
+export function PlayerControls({
+  car,
+  currentLap,
+  onSetDrivingMode,
+  onQueuePitStop,
+  onCancelPitStop,
+}: PlayerControlsProps) {
+  const [selectedCompound, setSelectedCompound] = useState<TireCompound>("medium");
+  const pendingStop = car.pitPlan[0];
+
+  return (
+    <div className="player-controls">
+      <div className="player-controls__row">
+        <div className="player-controls__label">Your tires</div>
+        <TireBadge compound={car.currentCompound} tireAge={car.tireAge} />
+      </div>
+
+      <div className="player-controls__row">
+        <div className="player-controls__label">Driving mode</div>
+        <div className="segmented">
+          {MODES.map((mode) => (
+            <button
+              key={mode}
+              className={mode === car.drivingMode ? "segmented__btn segmented__btn--active" : "segmented__btn"}
+              onClick={() => onSetDrivingMode(mode)}
+              disabled={car.finished}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="player-controls__row">
+        <div className="player-controls__label">Pit stop</div>
+        <div className="pit-controls">
+          <div className="segmented">
+            {COMPOUNDS.map((compound) => (
+              <button
+                key={compound}
+                className={
+                  compound === selectedCompound ? "segmented__btn segmented__btn--active" : "segmented__btn"
+                }
+                onClick={() => setSelectedCompound(compound)}
+                disabled={car.finished}
+              >
+                {compound}
+              </button>
+            ))}
+          </div>
+          <button
+            className="pit-controls__action"
+            disabled={car.finished}
+            onClick={() => onQueuePitStop(currentLap + 1, selectedCompound)}
+          >
+            Pit Next Lap
+          </button>
+          {pendingStop && (
+            <button className="pit-controls__cancel" onClick={onCancelPitStop}>
+              Cancel (Lap {pendingStop.lap}, {pendingStop.compound})
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

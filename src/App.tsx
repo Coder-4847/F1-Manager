@@ -1,13 +1,14 @@
-import { useState } from "react";
 import "./App.css";
 import { monza } from "./sim/tracks";
 import { drivers, getTeam } from "./sim/roster";
-import { setupRace, simulateLap, getStandings } from "./sim/raceEngine";
-import type { RaceState } from "./sim/types";
+import { useRace } from "./state/useRace";
+import { Leaderboard } from "./ui/Leaderboard";
+import { EventFeed } from "./ui/EventFeed";
+import { PlayerControls } from "./ui/PlayerControls";
+import { PlaybackControls } from "./ui/PlaybackControls";
+import { TrackPositionStrip } from "./ui/TrackPositionStrip";
 import type { InitialStrategy } from "./sim/strategy";
 
-// Phase 1: no interactive in-race controls yet — the player's plan is fixed
-// up front, same shape as the AI's, just to prove the simulation math works.
 const PLAYER_DRIVER_ID = "k-1"; // Ravi Chandran, Kestrel GP — solid midfield car/driver
 const PLAYER_STRATEGY: InitialStrategy = {
   startingCompound: "medium",
@@ -15,106 +16,84 @@ const PLAYER_STRATEGY: InitialStrategy = {
   pitPlan: [{ lap: 27, compound: "hard" }],
 };
 
-function formatGap(seconds: number): string {
-  if (seconds === 0) return "Leader";
-  return `+${seconds.toFixed(1)}s`;
-}
-
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = (seconds % 60).toFixed(3);
-  return `${m}:${s.padStart(6, "0")}`;
-}
-
 function App() {
-  const [raceState, setRaceState] = useState<RaceState | null>(null);
-  const [running, setRunning] = useState(false);
+  const {
+    raceState,
+    standings,
+    playerCar,
+    playing,
+    speed,
+    setSpeed,
+    play,
+    pause,
+    step,
+    reset,
+    setDrivingMode,
+    queuePitStop,
+    cancelPitStop,
+  } = useRace({ track: monza, playerDriverId: PLAYER_DRIVER_ID, playerStrategy: PLAYER_STRATEGY });
 
-  function runRace() {
-    setRunning(true);
-    const state = setupRace({
-      track: monza,
-      playerDriverId: PLAYER_DRIVER_ID,
-      playerStrategy: PLAYER_STRATEGY,
-    });
-
-    console.log(`--- Race start: ${monza.name}, ${monza.totalLaps} laps ---`);
-    while (!state.finished) {
-      simulateLap(state);
-      const lapEvents = state.events.filter((e) => e.lap === state.currentLap);
-      for (const event of lapEvents) {
-        console.log(`Lap ${event.lap}: ${event.message}`);
-      }
-    }
-    console.log("--- Race finished ---");
-    console.log(
-      getStandings(state)
-        .map((row) => `${row.position}. ${row.car.driver.name} (${row.car.team.name}) ${formatGap(row.gapToLeaderSeconds)}`)
-        .join("\n")
-    );
-
-    setRaceState(state);
-    setRunning(false);
-  }
-
-  const standings = raceState ? getStandings(raceState) : [];
-  const pitEvents = raceState ? raceState.events.filter((e) => e.type === "pit-stop") : [];
+  const playerDriver = drivers.find((d) => d.id === PLAYER_DRIVER_ID)!;
+  const playerStanding = standings.find((row) => row.car.isPlayer);
 
   return (
     <div className="app">
-      <h1>F1 Manager — Phase 1</h1>
-      <p className="subtitle">
-        {monza.name} &middot; {monza.totalLaps} laps &middot; you are managing{" "}
-        <strong>{drivers.find((d) => d.id === PLAYER_DRIVER_ID)?.name}</strong> (
-        {getTeam(drivers.find((d) => d.id === PLAYER_DRIVER_ID)!.teamId).name})
-      </p>
+      <header className="app__header">
+        <h1>F1 Manager</h1>
+        <p className="subtitle">
+          {monza.name} &middot; {monza.totalLaps} laps &middot; managing{" "}
+          <strong>{playerDriver.name}</strong> ({getTeam(playerDriver.teamId).name})
+        </p>
+      </header>
 
-      <button onClick={runRace} disabled={running}>
-        {running ? "Simulating..." : raceState ? "Run Again" : "Run Race"}
-      </button>
+      <PlaybackControls
+        currentLap={raceState.currentLap}
+        totalLaps={monza.totalLaps}
+        playing={playing}
+        finished={raceState.finished}
+        speed={speed}
+        onPlay={play}
+        onPause={pause}
+        onStep={step}
+        onReset={reset}
+        onSetSpeed={setSpeed}
+      />
 
-      {raceState && (
-        <div className="results">
-          <section>
-            <h2>Final Classification</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>Pos</th>
-                  <th>Driver</th>
-                  <th>Team</th>
-                  <th>Gap</th>
-                  <th>Total Time</th>
-                  <th>Stops</th>
-                </tr>
-              </thead>
-              <tbody>
-                {standings.map((row) => (
-                  <tr key={row.car.driver.id} className={row.car.isPlayer ? "player-row" : ""}>
-                    <td>{row.position}</td>
-                    <td>{row.car.driver.name}</td>
-                    <td>{row.car.team.name}</td>
-                    <td>{formatGap(row.gapToLeaderSeconds)}</td>
-                    <td>{formatTime(row.car.totalTimeSeconds)}</td>
-                    <td>{row.car.pitStopsMade}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-
-          <section>
-            <h2>Pit Stop Log</h2>
-            <ul className="event-log">
-              {pitEvents.map((event, i) => (
-                <li key={i}>
-                  Lap {event.lap}: {event.message}
-                </li>
-              ))}
-            </ul>
-          </section>
+      {playerStanding && (
+        <div className="player-summary">
+          P{playerStanding.position} &middot;{" "}
+          {playerStanding.position === 1 ? "Leader" : `+${playerStanding.gapToLeaderSeconds.toFixed(1)}s`}
         </div>
       )}
+
+      <TrackPositionStrip standings={standings} />
+
+      <div className="layout">
+        <section className="layout__main">
+          <h2>Leaderboard</h2>
+          <Leaderboard standings={standings} />
+        </section>
+
+        <aside className="layout__side">
+          {playerCar && (
+            <section>
+              <h2>Strategy</h2>
+              <PlayerControls
+                car={playerCar}
+                currentLap={raceState.currentLap}
+                onSetDrivingMode={setDrivingMode}
+                onQueuePitStop={queuePitStop}
+                onCancelPitStop={cancelPitStop}
+              />
+            </section>
+          )}
+
+          <section>
+            <h2>Event Feed</h2>
+            <EventFeed events={raceState.events} />
+          </section>
+        </aside>
+      </div>
     </div>
   );
 }

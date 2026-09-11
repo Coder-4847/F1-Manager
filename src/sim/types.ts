@@ -88,7 +88,7 @@ export interface CarState {
 }
 
 export interface LapEvent {
-  type: "pit-stop" | "fastest-lap";
+  type: "pit-stop" | "fastest-lap" | "position-change";
   lap: number;
   driverId: string;
   message: string;
