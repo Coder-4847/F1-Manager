@@ -11,7 +11,9 @@ import { PlaybackControls } from "./ui/PlaybackControls";
 import { LiveTrackView } from "./ui/LiveTrackView";
 import { SeasonStandings } from "./ui/SeasonStandings";
 import { DriverProfile } from "./ui/DriverProfile";
+import { SeasonSetup } from "./ui/SeasonSetup";
 import type { InitialStrategy } from "./sim/strategy";
+import type { SeasonRound } from "./sim/season";
 
 const PLAYER_DRIVER_ID = "k-1"; // Ravi Chandran, Kestrel GP — solid midfield car/driver
 const PLAYER_STRATEGY: InitialStrategy = {
@@ -33,6 +35,7 @@ function App() {
     constructorStandings,
     advanceToNextRound,
     restartSeason,
+    startCustomSeason,
     hasSave,
     saveProgress,
     loadProgress,
@@ -56,6 +59,7 @@ function App() {
   } = race;
 
   const [showProfileEditor, setShowProfileEditor] = useState(false);
+  const [showSeasonSetup, setShowSeasonSetup] = useState(false);
 
   const playerDriver = drivers.find((d) => d.id === PLAYER_DRIVER_ID)!;
   const playerTeam = getTeam(playerDriver.teamId);
@@ -69,6 +73,11 @@ function App() {
     setShowProfileEditor(false);
   };
 
+  const handleStartCustomSeason = (calendar: SeasonRound[]) => {
+    startCustomSeason(calendar);
+    setShowSeasonSetup(false);
+  };
+
   return (
     <div className="app">
       <div className="app__flag-strip" />
@@ -78,9 +87,10 @@ function App() {
           <span className="round-badge">
             Round {roundNumber}/{season.calendar.length}
           </span>
-          <button className="edit-driver-btn" onClick={() => setShowProfileEditor(true)}>
-            Edit Driver
-          </button>
+          <div className="app__header-actions">
+            <button onClick={() => setShowSeasonSetup(true)}>Custom Season</button>
+            <button onClick={() => setShowProfileEditor(true)}>Edit Driver</button>
+          </div>
         </div>
         <p className="subtitle">
           {track.name} &middot; {track.totalLaps} laps &middot; managing{" "}
@@ -101,6 +111,14 @@ function App() {
           onSave={handleSaveProfile}
           onResetToDefault={() => getDefaultProfile(PLAYER_DRIVER_ID)}
           onClose={() => setShowProfileEditor(false)}
+        />
+      )}
+
+      {showSeasonSetup && (
+        <SeasonSetup
+          initialCalendar={season.calendar}
+          onStart={handleStartCustomSeason}
+          onClose={() => setShowSeasonSetup(false)}
         />
       )}
 

@@ -9,7 +9,6 @@ import {
 } from "../sim/raceEngine";
 import type { DrivingMode, RaceState, TireCompound, Track } from "../sim/types";
 import type { InitialStrategy } from "../sim/strategy";
-import { getTrack } from "../sim/tracks";
 
 export type PlaybackSpeed = 0.5 | 1 | 2 | 4;
 
@@ -70,9 +69,9 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
   }, [playerDriverId, playerStrategy]);
 
   const switchTrack = useCallback(
-    (trackId: string) => {
+    (track: Track) => {
       setPlaying(false);
-      setRaceState(setupRace({ track: getTrack(trackId), playerDriverId, playerStrategy }));
+      setRaceState(setupRace({ track, playerDriverId, playerStrategy }));
     },
     [playerDriverId, playerStrategy]
   );

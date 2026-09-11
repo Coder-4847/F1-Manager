@@ -1,7 +1,9 @@
 import type { RaceState } from "../sim/types";
 import type { SeasonState } from "../sim/season";
 
-const SAVE_KEY = "f1-manager-save-v2";
+// Bumped to v3 because SeasonState.calendar changed shape (string[] -> SeasonRound[])
+// for custom seasons — an old v2 save would otherwise load malformed data and crash.
+const SAVE_KEY = "f1-manager-save-v3";
 
 export interface SeasonSave {
   season: SeasonState;

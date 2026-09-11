@@ -3,13 +3,12 @@ import { useRace } from "./useRace";
 import {
   completeRound,
   createSeason,
-  currentRoundTrackId,
+  currentRoundTrack,
   getConstructorStandings,
   getDriverStandings,
   isSeasonComplete,
 } from "../sim/season";
-import type { SeasonState } from "../sim/season";
-import { getTrack } from "../sim/tracks";
+import type { SeasonRound, SeasonState } from "../sim/season";
 import type { InitialStrategy } from "../sim/strategy";
 import { hasSeasonSave, loadSeasonProgress, saveSeasonProgress } from "./persistence";
 
@@ -21,12 +20,12 @@ export interface UseSeasonOptions {
 export function useSeason({ playerDriverId, playerStrategy }: UseSeasonOptions) {
   const [season, setSeason] = useState<SeasonState>(() => createSeason());
 
-  // Computed once, lazily, at mount — a fresh season's round 1 track id is
+  // Computed once, lazily, at mount — a fresh season's round 1 track is
   // always valid. Recomputing this from `season` on every render would crash
-  // once the season completes and currentRoundTrackId(season) becomes null.
-  const [initialTrackId] = useState(() => currentRoundTrackId(season)!);
+  // once the season completes and currentRoundTrack(season) becomes null.
+  const [initialTrack] = useState(() => currentRoundTrack(season)!);
   const race = useRace({
-    initialTrack: getTrack(initialTrackId),
+    initialTrack,
     playerDriverId,
     playerStrategy,
   });
@@ -37,15 +36,26 @@ export function useSeason({ playerDriverId, playerStrategy }: UseSeasonOptions) 
     if (!race.raceState.finished || seasonComplete) return;
     const updated = completeRound(season, race.standings);
     setSeason(updated);
-    const nextTrackId = currentRoundTrackId(updated);
-    if (nextTrackId) race.switchTrack(nextTrackId);
+    const nextTrack = currentRoundTrack(updated);
+    if (nextTrack) race.switchTrack(nextTrack);
   }, [race, season, seasonComplete]);
 
+  // Restarts using the *current* calendar (default or custom) — a season built
+  // via startCustomSeason stays the same shape when restarted, not the default 12.
   const restartSeason = useCallback(() => {
-    const fresh = createSeason();
+    const fresh = createSeason(season.calendar);
     setSeason(fresh);
-    race.switchTrack(currentRoundTrackId(fresh)!);
-  }, [race]);
+    race.switchTrack(currentRoundTrack(fresh)!);
+  }, [race, season.calendar]);
+
+  const startCustomSeason = useCallback(
+    (calendar: SeasonRound[]) => {
+      const fresh = createSeason(calendar);
+      setSeason(fresh);
+      race.switchTrack(currentRoundTrack(fresh)!);
+    },
+    [race]
+  );
 
   const [hasSave, setHasSave] = useState(() => hasSeasonSave());
 
@@ -70,6 +80,7 @@ export function useSeason({ playerDriverId, playerStrategy }: UseSeasonOptions) 
     constructorStandings: getConstructorStandings(season),
     advanceToNextRound,
     restartSeason,
+    startCustomSeason,
     hasSave,
     saveProgress,
     loadProgress,

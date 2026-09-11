@@ -1,11 +1,19 @@
 import type { StandingsRow } from "./raceEngine";
 import { drivers, getTeam } from "./roster";
 import { getTrack, tracks } from "./tracks";
+import type { Track } from "./types";
 
 const POINTS_TABLE = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 
 export function pointsForPosition(position: number): number {
   return POINTS_TABLE[position - 1] ?? 0;
+}
+
+export interface SeasonRound {
+  trackId: string;
+  /** Laps for this round — independent of the track's own default totalLaps, so a
+   *  custom season can shorten/lengthen a race without altering the track itself. */
+  laps: number;
 }
 
 export interface RoundResult {
@@ -15,14 +23,18 @@ export interface RoundResult {
 }
 
 export interface SeasonState {
-  calendar: string[];
+  calendar: SeasonRound[];
   /** Index into `calendar` of the round currently being raced (or next up). */
   roundIndex: number;
   driverPoints: Record<string, number>;
   results: RoundResult[];
 }
 
-export function createSeason(calendar: string[] = tracks.map((t) => t.id)): SeasonState {
+export function defaultCalendar(): SeasonRound[] {
+  return tracks.map((t) => ({ trackId: t.id, laps: t.totalLaps }));
+}
+
+export function createSeason(calendar: SeasonRound[] = defaultCalendar()): SeasonState {
   return {
     calendar,
     roundIndex: 0,
@@ -35,14 +47,22 @@ export function isSeasonComplete(season: SeasonState): boolean {
   return season.roundIndex >= season.calendar.length;
 }
 
-export function currentRoundTrackId(season: SeasonState): string | null {
+export function currentRound(season: SeasonState): SeasonRound | null {
   return isSeasonComplete(season) ? null : season.calendar[season.roundIndex];
+}
+
+/** The track for the current round, with that round's custom lap count applied on top of
+ *  the track's normal data — a shallow copy, so the shared track registry is never mutated
+ *  (the same track can appear more than once in a calendar with a different lap count each time). */
+export function currentRoundTrack(season: SeasonState): Track | null {
+  const round = currentRound(season);
+  return round ? { ...getTrack(round.trackId), totalLaps: round.laps } : null;
 }
 
 /** Records a finished race's standings into the season and advances to the next round. */
 export function completeRound(season: SeasonState, standings: StandingsRow[]): SeasonState {
-  const trackId = currentRoundTrackId(season);
-  if (!trackId) return season;
+  const round = currentRound(season);
+  if (!round) return season;
 
   const roundStandings = standings.map((row) => ({
     driverId: row.car.driver.id,
@@ -55,7 +75,11 @@ export function completeRound(season: SeasonState, standings: StandingsRow[]): S
     driverPoints[entry.driverId] = (driverPoints[entry.driverId] ?? 0) + entry.points;
   }
 
-  const result: RoundResult = { trackId, trackName: getTrack(trackId).name, standings: roundStandings };
+  const result: RoundResult = {
+    trackId: round.trackId,
+    trackName: getTrack(round.trackId).name,
+    standings: roundStandings,
+  };
 
   return {
     ...season,

@@ -177,6 +177,26 @@ src/
     original roster values taken once at `roster.ts` module load, before
     any edit can mutate them — `getDefaultProfile()` reads from that
     snapshot, not from the (possibly-mutated) live roster.
+12. **Custom seasons** — "Custom Season" modal (`ui/SeasonSetup.tsx`) lets the
+    player build a calendar from scratch: add any of the 12 tracks (any
+    number of times, including repeats), reorder rounds with ↑/↓, edit each
+    round's lap count independently (3-100, clamped), remove rounds, or
+    "Fill All 12 (Default Order)" for the original experience. `SeasonState.
+    calendar` changed shape from `string[]` (track ids) to `SeasonRound[]`
+    (`{trackId, laps}` — `sim/season.ts`), so a race's laps are no longer
+    tied to the track's own `totalLaps`; `currentRoundTrack()` builds the
+    actual `Track` passed into the race as a **shallow copy** of the
+    registry track with `totalLaps` overridden, so the shared track objects
+    in `tracks.ts` are never mutated (needed since the same track can appear
+    more than once in one calendar with different lap counts each time).
+    `useRace.switchTrack` changed from taking a `trackId` to taking a full
+    `Track` object so it can carry that per-round override. `restartSeason`
+    now restarts with the *current* calendar (custom or default) instead of
+    always reverting to the default 12 — a deliberate improvement, and a
+    no-op for the plain-default case since that's what it already did.
+    Bumped the season-save localStorage key to `f1-manager-save-v3` since
+    the `calendar` schema changed shape and an old `v2` save would otherwise
+    load malformed data and crash.
 
 ## A real bug that was found and fixed (worth knowing about)
 
@@ -220,3 +240,8 @@ through the exact crash point with zero errors afterward.
 - The user explicitly wants scope kept tight per phase — features not asked
   for (e.g. a "quick single race" mode after season mode replaced it) were
   intentionally left out rather than added speculatively.
+- **Push to GitHub after every change** (explicit standing instruction,
+  2026-09-11): commit and `git push origin master` at the end of each
+  feature/change, not just locally commit. No need to ask permission each
+  time for this specific repo — the user pre-authorized it in chat. Still
+  never force-push or rewrite history without asking.
