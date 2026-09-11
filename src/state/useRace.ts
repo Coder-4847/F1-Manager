@@ -13,11 +13,13 @@ import { getTrack } from "../sim/tracks";
 
 export type PlaybackSpeed = 0.5 | 1 | 2 | 4;
 
-const TICK_MS_BY_SPEED: Record<PlaybackSpeed, number> = {
-  0.5: 900,
-  1: 450,
-  2: 220,
-  4: 100,
+// 1x ≈ 5 real seconds per simulated lap, so the live track view has enough
+// time to visibly sweep the cars around the circuit each lap.
+export const TICK_MS_BY_SPEED: Record<PlaybackSpeed, number> = {
+  0.5: 10000,
+  1: 5000,
+  2: 2500,
+  4: 1250,
 };
 
 export interface UseRaceOptions {
@@ -111,6 +113,7 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
     playerCar,
     playing,
     speed,
+    tickDurationMs: TICK_MS_BY_SPEED[speed],
     setSpeed,
     play,
     pause,

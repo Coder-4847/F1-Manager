@@ -5,7 +5,7 @@ import { Leaderboard } from "./ui/Leaderboard";
 import { EventFeed } from "./ui/EventFeed";
 import { PlayerControls } from "./ui/PlayerControls";
 import { PlaybackControls } from "./ui/PlaybackControls";
-import { TrackPositionStrip } from "./ui/TrackPositionStrip";
+import { LiveTrackView } from "./ui/LiveTrackView";
 import { SeasonStandings } from "./ui/SeasonStandings";
 import type { InitialStrategy } from "./sim/strategy";
 
@@ -36,6 +36,7 @@ function App() {
     playerCar,
     playing,
     speed,
+    tickDurationMs,
     setSpeed,
     play,
     pause,
@@ -92,7 +93,14 @@ function App() {
         </div>
       )}
 
-      <TrackPositionStrip standings={standings} />
+      <LiveTrackView
+        track={track}
+        standings={standings}
+        currentLap={raceState.currentLap}
+        playing={playing}
+        tickDurationMs={tickDurationMs}
+        events={raceState.events}
+      />
 
       <div className="layout">
         <section className="layout__main">
