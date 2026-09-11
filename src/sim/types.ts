@@ -21,6 +21,10 @@ export interface Driver {
   name: string;
   teamId: string;
   stats: DriverStats;
+  /** Editable flavor fields — only populated for the player's driver today. */
+  age?: number;
+  nationality?: string;
+  number?: number;
 }
 
 export interface Team {

@@ -21,7 +21,15 @@ export const drivers: Driver[] = [
   { id: "v-1", name: "Oskar Lindqvist", teamId: "vantage", stats: { pace: 90, tireManagement: 75, consistency: 84, aggression: 78 } },
   { id: "v-2", name: "Diego Marín", teamId: "vantage", stats: { pace: 87, tireManagement: 82, consistency: 86, aggression: 60 } },
   // Kestrel
-  { id: "k-1", name: "Ravi Chandran", teamId: "kestrel", stats: { pace: 85, tireManagement: 88, consistency: 90, aggression: 50 } },
+  {
+    id: "k-1",
+    name: "Ravi Chandran",
+    teamId: "kestrel",
+    stats: { pace: 85, tireManagement: 88, consistency: 90, aggression: 50 },
+    age: 26,
+    nationality: "India",
+    number: 22,
+  },
   { id: "k-2", name: "Felix Amaro", teamId: "kestrel", stats: { pace: 83, tireManagement: 78, consistency: 79, aggression: 70 } },
   // Obsidian
   { id: "o-1", name: "Niklas Voss", teamId: "obsidian", stats: { pace: 82, tireManagement: 80, consistency: 81, aggression: 66 } },
@@ -40,8 +48,47 @@ export const drivers: Driver[] = [
   { id: "vu-2", name: "Tomás Herrera", teamId: "vulcan", stats: { pace: 65, tireManagement: 73, consistency: 72, aggression: 58 } },
 ];
 
+// Snapshotted immediately after roster creation, before anything has a chance to call
+// updateDriverProfile — this is the only correct source for "reset to default" values,
+// since `drivers` itself gets mutated in place by profile edits.
+const defaultProfiles = new Map<string, DriverProfileEdit>(
+  drivers
+    .filter((d) => d.age !== undefined)
+    .map((d) => [d.id, { name: d.name, age: d.age!, nationality: d.nationality!, number: d.number! }])
+);
+
 export function getTeam(teamId: string): Team {
   const team = teams.find((t) => t.id === teamId);
   if (!team) throw new Error(`Unknown team id: ${teamId}`);
   return team;
+}
+
+export function getDriver(driverId: string): Driver {
+  const driver = drivers.find((d) => d.id === driverId);
+  if (!driver) throw new Error(`Unknown driver id: ${driverId}`);
+  return driver;
+}
+
+export interface DriverProfileEdit {
+  name: string;
+  age: number;
+  nationality: string;
+  number: number;
+}
+
+/** The original values a driver's profile was created with — used to power a "reset" action. */
+export function getDefaultProfile(driverId: string): DriverProfileEdit {
+  const profile = defaultProfiles.get(driverId);
+  if (!profile) throw new Error(`No default profile for driver id: ${driverId}`);
+  return { ...profile };
+}
+
+/**
+ * Mutates a roster driver's editable fields in place (rather than replacing the object),
+ * so every existing reference to it — an in-progress race's CarState, season standings,
+ * event log messages — picks up the change immediately without threading new state
+ * through useSeason/useRace/raceEngine.
+ */
+export function updateDriverProfile(driverId: string, edit: DriverProfileEdit): void {
+  Object.assign(getDriver(driverId), edit);
 }

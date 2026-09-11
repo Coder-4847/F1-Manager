@@ -1,12 +1,16 @@
+import { useState } from "react";
 import "./App.css";
-import { drivers, getTeam } from "./sim/roster";
+import { drivers, getDefaultProfile, getTeam, updateDriverProfile } from "./sim/roster";
+import type { DriverProfileEdit } from "./sim/roster";
 import { useSeason } from "./state/useSeason";
+import { applyStoredDriverProfile, saveDriverProfile } from "./state/driverProfile";
 import { Leaderboard } from "./ui/Leaderboard";
 import { EventFeed } from "./ui/EventFeed";
 import { PlayerControls } from "./ui/PlayerControls";
 import { PlaybackControls } from "./ui/PlaybackControls";
 import { LiveTrackView } from "./ui/LiveTrackView";
 import { SeasonStandings } from "./ui/SeasonStandings";
+import { DriverProfile } from "./ui/DriverProfile";
 import type { InitialStrategy } from "./sim/strategy";
 
 const PLAYER_DRIVER_ID = "k-1"; // Ravi Chandran, Kestrel GP — solid midfield car/driver
@@ -15,6 +19,10 @@ const PLAYER_STRATEGY: InitialStrategy = {
   drivingMode: "balanced",
   pitPlan: [{ lap: 27, compound: "hard" }],
 };
+
+// Runs once at module load, before useSeason's lazy initializer builds the first
+// race — applies any profile edit saved in a previous session to the roster.
+applyStoredDriverProfile(PLAYER_DRIVER_ID);
 
 function App() {
   const {
@@ -47,10 +55,19 @@ function App() {
     cancelPitStop,
   } = race;
 
+  const [showProfileEditor, setShowProfileEditor] = useState(false);
+
   const playerDriver = drivers.find((d) => d.id === PLAYER_DRIVER_ID)!;
+  const playerTeam = getTeam(playerDriver.teamId);
   const playerStanding = standings.find((row) => row.car.isPlayer);
   const track = raceState.track;
   const roundNumber = Math.min(season.roundIndex + 1, season.calendar.length);
+
+  const handleSaveProfile = (edit: DriverProfileEdit) => {
+    updateDriverProfile(PLAYER_DRIVER_ID, edit);
+    saveDriverProfile(edit);
+    setShowProfileEditor(false);
+  };
 
   return (
     <div className="app">
@@ -61,12 +78,31 @@ function App() {
           <span className="round-badge">
             Round {roundNumber}/{season.calendar.length}
           </span>
+          <button className="edit-driver-btn" onClick={() => setShowProfileEditor(true)}>
+            Edit Driver
+          </button>
         </div>
         <p className="subtitle">
           {track.name} &middot; {track.totalLaps} laps &middot; managing{" "}
-          <strong>{playerDriver.name}</strong> ({getTeam(playerDriver.teamId).name})
+          <strong>#{playerDriver.number} {playerDriver.name}</strong> ({playerTeam.name}
+          {playerDriver.nationality ? ` · ${playerDriver.nationality}` : ""})
         </p>
       </header>
+
+      {showProfileEditor && (
+        <DriverProfile
+          teamName={playerTeam.name}
+          profile={{
+            name: playerDriver.name,
+            age: playerDriver.age!,
+            nationality: playerDriver.nationality!,
+            number: playerDriver.number!,
+          }}
+          onSave={handleSaveProfile}
+          onResetToDefault={() => getDefaultProfile(PLAYER_DRIVER_ID)}
+          onClose={() => setShowProfileEditor(false)}
+        />
+      )}
 
       <PlaybackControls
         currentLap={raceState.currentLap}
