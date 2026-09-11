@@ -37,10 +37,13 @@ lap, and easy access to Framer Motion for the reorder animations.
 - `vite.config.ts` sets `base: '/F1-Manager/'` for production builds only
   (dev server still serves from `/`) since Pages serves a project site from
   a `/<repo-name>/` subpath.
-- **One-time manual step that may still be needed**: in the repo's Settings →
-  Pages, the deployment source must be "GitHub Actions". I could not verify
-  or set this myself (no `gh` CLI / API token available in that session) —
-  check the Actions tab if the site isn't live after a push.
+- **Confirmed working (2026-09-11, via the user's logged-in browser)**: Settings
+  → Pages → Source is set to "GitHub Actions" and the site is live. The first
+  two workflow runs failed (`404 Not Found` on the deploy step) because that
+  setting hadn't been switched yet at the time; the third run, after it was
+  set, succeeded and is what's currently live. No manual step is outstanding —
+  every push to `master` redeploys automatically within about a minute, no
+  separate "relaunch" action needed on the GitHub side.
 
 ## How to run locally
 
