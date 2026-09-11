@@ -3,6 +3,7 @@ import type { AIDecisionContext, InitialStrategy } from "./strategy";
 import { calculateLapTime } from "./lapTime";
 import { pitStopTimeLoss } from "./pitStop";
 import { decideAIAction, generateAIStrategy } from "./strategy";
+import { resolveOvertakeAttempt } from "./overtaking";
 import { drivers, getTeam } from "./roster";
 
 export interface RaceSetup {
@@ -54,19 +55,35 @@ function orderByTime(state: RaceState): string[] {
     .map((c) => c.driver.id);
 }
 
+/** Gap (seconds) within which two cars are considered to be fighting for the same piece of track this lap. */
+const BATTLE_ZONE_SECONDS = 0.8;
+/** How far ahead a successful attacker ends up once the move is completed. */
+const PASS_MARGIN_SECONDS = 0.15;
+/** How far behind a defended attacker is held — the "stuck in dirty air" tax. */
+const HELD_UP_GAP_SECONDS = 0.35;
+
+interface LapCompute {
+  car: CarState;
+  rawLapTime: number;
+  duePitStop?: PitStopPlan;
+  pitLoss?: number;
+}
+
 /** Advances every car by exactly one lap, mutating and returning the same RaceState. */
 export function simulateLap(state: RaceState, random: () => number = Math.random): RaceState {
   if (state.finished) return state;
 
   const orderBefore = orderByTime(state);
 
-  // Snapshot pre-lap totals/tire ages so AI decisions this lap all see the same
-  // "entering this lap" picture, regardless of the order cars are processed in.
+  // Snapshot pre-lap totals/tire ages so AI decisions and battle resolution this
+  // lap all see the same "entering this lap" picture, regardless of processing order.
   const preLap = new Map(state.cars.map((c) => [c.driver.id, { totalTime: c.totalTimeSeconds, tireAge: c.tireAge }]));
 
   state.currentLap += 1;
   const lapEvents: LapEvent[] = [];
-  let fastestLap = { driverId: "", time: Infinity };
+
+  // Phase A: reactive AI calls + raw lap time / pit stop determination, no totals touched yet.
+  const computed = new Map<string, LapCompute>();
 
   for (const car of state.cars) {
     if (car.finished) continue;
@@ -97,47 +114,76 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
     const duePitStop: PitStopPlan | undefined =
       car.pitPlan[0]?.lap === state.currentLap ? car.pitPlan.shift() : undefined;
 
-    const lapTime = calculateLapTime(car, state.track, random);
-    car.totalTimeSeconds += lapTime;
-    car.lapTimes.push(lapTime);
+    const rawLapTime = calculateLapTime(car, state.track, random);
+    const pitLoss = duePitStop ? pitStopTimeLoss(state.track, random) : undefined;
+
+    computed.set(car.driver.id, { car, rawLapTime, duePitStop, pitLoss });
+  }
+
+  // Phase B: resolve battles in track-position order (leader first) so a fresh
+  // gap cascades correctly down a train of cars, then apply the final totals.
+  const resolvedTotal = new Map<string, number>();
+
+  orderBefore.forEach((driverId, index) => {
+    const entry = computed.get(driverId);
+    if (!entry) return; // already finished before this lap
+
+    const { car, rawLapTime, duePitStop, pitLoss } = entry;
+    const preTotal = preLap.get(driverId)!.totalTime;
+    const naiveTotal = preTotal + rawLapTime + (pitLoss ?? 0);
+
+    let finalTotal = naiveTotal;
+
+    const aheadId = index > 0 ? orderBefore[index - 1] : null;
+    const aheadEntry = aheadId ? computed.get(aheadId) : undefined;
+    const aheadFinal = aheadId ? resolvedTotal.get(aheadId) : undefined;
+
+    if (!duePitStop && aheadEntry && !aheadEntry.duePitStop && aheadFinal !== undefined) {
+      const gap = naiveTotal - aheadFinal;
+      if (Math.abs(gap) < BATTLE_ZONE_SECONDS) {
+        const passed = resolveOvertakeAttempt(
+          car,
+          rawLapTime,
+          aheadEntry.car,
+          aheadEntry.rawLapTime,
+          state.track,
+          random
+        );
+        if (passed) {
+          finalTotal = Math.min(naiveTotal, aheadFinal - PASS_MARGIN_SECONDS);
+          lapEvents.push({
+            type: "overtake",
+            lap: state.currentLap,
+            driverId,
+            message: `${car.driver.name} passes ${aheadEntry.car.driver.name} for position!`,
+          });
+        } else {
+          finalTotal = Math.max(naiveTotal, aheadFinal + HELD_UP_GAP_SECONDS);
+        }
+      }
+    }
+
+    resolvedTotal.set(driverId, finalTotal);
+
+    car.totalTimeSeconds = finalTotal;
+    car.lapTimes.push(rawLapTime);
     car.tireAge += 1;
     car.lapsCompleted += 1;
 
     if (duePitStop) {
-      const loss = pitStopTimeLoss(state.track, random);
-      car.totalTimeSeconds += loss;
       car.currentCompound = duePitStop.compound;
       car.tireAge = 0;
       car.pitStopsMade += 1;
       lapEvents.push({
         type: "pit-stop",
         lap: state.currentLap,
-        driverId: car.driver.id,
-        message: `${car.driver.name} pits for ${duePitStop.compound} tires (+${loss.toFixed(1)}s)`,
+        driverId,
+        message: `${car.driver.name} pits for ${duePitStop.compound} tires (+${(pitLoss ?? 0).toFixed(1)}s)`,
       });
-    }
-
-    if (lapTime < fastestLap.time) {
-      fastestLap = { driverId: car.driver.id, time: lapTime };
     }
 
     if (car.lapsCompleted >= state.track.totalLaps) {
       car.finished = true;
-    }
-  }
-
-  const orderAfter = orderByTime(state);
-  const driverById = new Map(state.cars.map((c) => [c.driver.id, c]));
-  orderAfter.forEach((driverId, afterIndex) => {
-    const beforeIndex = orderBefore.indexOf(driverId);
-    if (beforeIndex !== -1 && afterIndex < beforeIndex) {
-      const car = driverById.get(driverId)!;
-      lapEvents.push({
-        type: "position-change",
-        lap: state.currentLap,
-        driverId,
-        message: `${car.driver.name} moves up to P${afterIndex + 1}`,
-      });
     }
   });
 
@@ -162,8 +208,8 @@ export function setPlayerDrivingMode(state: RaceState, mode: DrivingMode): void 
 
 /**
  * Replaces the player car's pending pit stop queue with a single stop on the given lap.
- * Only one pending stop is tracked at a time in Phase 2 — calling this again before the
- * scheduled lap overrides it (e.g. changing your mind about the compound).
+ * Only one pending stop is tracked at a time — calling this again before the scheduled
+ * lap overrides it (e.g. changing your mind about the compound).
  */
 export function queuePlayerPitStop(state: RaceState, lap: number, compound: TireCompound): void {
   const car = getPlayerCar(state);
@@ -189,7 +235,7 @@ export interface StandingsRow {
   gapToLeaderSeconds: number;
 }
 
-/** Standings ordered by total race time (ascending). Valid mid-race and post-race for Phase 1's no-lapped-traffic model. */
+/** Standings ordered by total race time (ascending). */
 export function getStandings(state: RaceState): StandingsRow[] {
   const sorted = [...state.cars].sort((a, b) => a.totalTimeSeconds - b.totalTimeSeconds);
   const leaderTime = sorted[0]?.totalTimeSeconds ?? 0;

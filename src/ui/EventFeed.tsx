@@ -2,8 +2,7 @@ import type { LapEvent } from "../sim/types";
 
 const ICON: Record<LapEvent["type"], string> = {
   "pit-stop": "🔧",
-  "fastest-lap": "⚡",
-  "position-change": "▲",
+  overtake: "⏩",
 };
 
 export function EventFeed({ events }: { events: LapEvent[] }) {

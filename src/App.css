@@ -310,6 +310,6 @@ table.leaderboard {
   min-width: 2.4rem;
 }
 
-.event-feed__item--position-change {
+.event-feed__item--overtake {
   color: var(--wear-low);
 }
