@@ -1,8 +1,8 @@
 import type { CarState, Driver, DrivingMode, LapEvent, PitStopPlan, RaceState, TireCompound, Track } from "./types";
-import type { InitialStrategy } from "./strategy";
+import type { AIDecisionContext, InitialStrategy } from "./strategy";
 import { calculateLapTime } from "./lapTime";
 import { pitStopTimeLoss } from "./pitStop";
-import { generateAIStrategy } from "./strategy";
+import { decideAIAction, generateAIStrategy } from "./strategy";
 import { drivers, getTeam } from "./roster";
 
 export interface RaceSetup {
@@ -60,12 +60,39 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
 
   const orderBefore = orderByTime(state);
 
+  // Snapshot pre-lap totals/tire ages so AI decisions this lap all see the same
+  // "entering this lap" picture, regardless of the order cars are processed in.
+  const preLap = new Map(state.cars.map((c) => [c.driver.id, { totalTime: c.totalTimeSeconds, tireAge: c.tireAge }]));
+
   state.currentLap += 1;
   const lapEvents: LapEvent[] = [];
   let fastestLap = { driverId: "", time: Infinity };
 
   for (const car of state.cars) {
     if (car.finished) continue;
+
+    if (!car.isPlayer) {
+      const idx = orderBefore.indexOf(car.driver.id);
+      const aheadId = idx > 0 ? orderBefore[idx - 1] : null;
+      const behindId = idx < orderBefore.length - 1 ? orderBefore[idx + 1] : null;
+      const ahead = aheadId ? preLap.get(aheadId) : undefined;
+      const behind = behindId ? preLap.get(behindId) : undefined;
+      const self = preLap.get(car.driver.id)!;
+
+      const ctx: AIDecisionContext = {
+        track: state.track,
+        gapAheadSeconds: ahead ? self.totalTime - ahead.totalTime : null,
+        gapBehindSeconds: behind ? behind.totalTime - self.totalTime : null,
+        aheadTireAge: ahead ? ahead.tireAge : null,
+        behindTireAge: behind ? behind.tireAge : null,
+      };
+
+      const decision = decideAIAction(car, ctx, random);
+      car.drivingMode = decision.drivingMode;
+      if (decision.pitCompound) {
+        car.pitPlan = [{ lap: state.currentLap, compound: decision.pitCompound }];
+      }
+    }
 
     const duePitStop: PitStopPlan | undefined =
       car.pitPlan[0]?.lap === state.currentLap ? car.pitPlan.shift() : undefined;

@@ -1,36 +1,109 @@
-import type { Driver, DrivingMode, PitStopPlan, TireCompound, Track } from "./types";
+import type { CarState, Driver, DrivingMode, PitStopPlan, TireCompound, Track } from "./types";
+import { tireWearPercent } from "./tires";
 
 export interface InitialStrategy {
   startingCompound: TireCompound;
+  /** Pre-set pit stops queued before the race starts. AI cars start with none — Phase 3 decides pit calls reactively, lap by lap. The player can still pre-queue one via the UI. */
   pitPlan: PitStopPlan[];
   drivingMode: DrivingMode;
 }
 
 /**
- * Phase 1 AI: fixed-but-varied heuristic strategy per driver, decided once
- * before the race starts (no in-race reactions yet — that's Phase 3).
- *
- * More aggressive drivers lean toward softer tires and more stops; the rest
- * take a steadier 1-stop approach. A little randomness keeps the grid varied.
+ * Phase 3 AI: only the starting compound + opening driving mode are decided
+ * up front now. Pit calls are made reactively each lap by decideAIAction.
  */
-export function generateAIStrategy(driver: Driver, track: Track, random: () => number = Math.random): InitialStrategy {
+export function generateAIStrategy(driver: Driver, _track: Track, random: () => number = Math.random): InitialStrategy {
   const aggressive = driver.stats.aggression >= 65;
-  const twoStop = aggressive ? random() < 0.65 : random() < 0.25;
-
   const startingCompound: TireCompound = aggressive ? "soft" : random() < 0.5 ? "medium" : "soft";
-
   const drivingMode: DrivingMode = aggressive ? "push" : random() < 0.3 ? "conserve" : "balanced";
 
-  const pitPlan: PitStopPlan[] = [];
-  if (twoStop) {
-    const firstWindow = Math.round(track.totalLaps * (0.3 + random() * 0.08));
-    const secondWindow = Math.round(track.totalLaps * (0.65 + random() * 0.08));
-    pitPlan.push({ lap: firstWindow, compound: "medium" });
-    pitPlan.push({ lap: secondWindow, compound: random() < 0.5 ? "medium" : "hard" });
-  } else {
-    const window = Math.round(track.totalLaps * (0.45 + random() * 0.1));
-    pitPlan.push({ lap: window, compound: "hard" });
+  return { startingCompound, pitPlan: [], drivingMode };
+}
+
+export interface AIDecisionContext {
+  track: Track;
+  /** Gap to the car directly ahead in the standings, seconds. Null if leading. */
+  gapAheadSeconds: number | null;
+  /** Gap to the car directly behind, seconds. Null if last. */
+  gapBehindSeconds: number | null;
+  /** Tire age (laps) of the car directly ahead, from before this lap. Null if leading. */
+  aheadTireAge: number | null;
+  /** Tire age (laps) of the car directly behind, from before this lap. Null if last. */
+  behindTireAge: number | null;
+}
+
+export interface AIAction {
+  pitCompound?: TireCompound;
+  drivingMode: DrivingMode;
+}
+
+const BASE_PIT_THRESHOLD = 72;
+const MIN_STINT_LAPS = 8;
+const CLOSE_GAP_SECONDS = 3;
+const BATTLE_GAP_SECONDS = 1.5;
+
+/**
+ * Reactive per-lap strategy call for one AI car. Looks at tire wear plus the
+ * gaps/tire ages of the cars immediately ahead and behind to decide whether
+ * to pit this lap and what driving mode to run. Deliberately simple — a
+ * handful of heuristics, not an optimizer — but it reacts to the live race
+ * instead of following a plan fixed before lights-out.
+ */
+export function decideAIAction(car: CarState, ctx: AIDecisionContext, random: () => number = Math.random): AIAction {
+  const lapsRemaining = ctx.track.totalLaps - car.lapsCompleted;
+  const wearPct = tireWearPercent(car.currentCompound, car.tireAge);
+
+  let threshold =
+    BASE_PIT_THRESHOLD - (car.driver.stats.aggression - 50) * 0.3 + (car.driver.stats.tireManagement - 50) * 0.2;
+
+  // Undercut: the car ahead is close and on more worn tires — pit early to jump them.
+  if (
+    ctx.gapAheadSeconds !== null &&
+    ctx.gapAheadSeconds < CLOSE_GAP_SECONDS &&
+    ctx.aheadTireAge !== null &&
+    ctx.aheadTireAge > car.tireAge + 3
+  ) {
+    threshold -= 10;
   }
 
-  return { startingCompound, pitPlan, drivingMode };
+  // Cover: the car behind is close and already on fresher tires — react before they undercut further.
+  if (
+    ctx.gapBehindSeconds !== null &&
+    ctx.gapBehindSeconds < CLOSE_GAP_SECONDS &&
+    ctx.behindTireAge !== null &&
+    ctx.behindTireAge < car.tireAge - 5
+  ) {
+    threshold -= 8;
+  }
+
+  threshold = Math.max(55, Math.min(92, threshold));
+
+  const lateRaceGuard = lapsRemaining <= 4 && wearPct < 92;
+  const shouldPit = car.tireAge >= MIN_STINT_LAPS && !lateRaceGuard && wearPct >= threshold;
+
+  let pitCompound: TireCompound | undefined;
+  if (shouldPit) {
+    if (lapsRemaining <= 16) {
+      pitCompound = random() < 0.5 ? "medium" : "soft";
+    } else if (car.driver.stats.aggression >= 65) {
+      pitCompound = "soft";
+    } else if (car.driver.stats.aggression <= 40) {
+      pitCompound = "hard";
+    } else {
+      pitCompound = "medium";
+    }
+  }
+
+  const inBattle =
+    (ctx.gapAheadSeconds !== null && ctx.gapAheadSeconds < BATTLE_GAP_SECONDS) ||
+    (ctx.gapBehindSeconds !== null && ctx.gapBehindSeconds < BATTLE_GAP_SECONDS);
+
+  let drivingMode: DrivingMode = "balanced";
+  if (inBattle && wearPct < 70) {
+    drivingMode = "push";
+  } else if (wearPct > 60 && !shouldPit) {
+    drivingMode = "conserve";
+  }
+
+  return { pitCompound, drivingMode };
 }
