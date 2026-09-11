@@ -54,11 +54,17 @@ function App() {
 
   return (
     <div className="app">
+      <div className="app__flag-strip" />
       <header className="app__header">
-        <h1>F1 Manager</h1>
+        <div className="app__title-row">
+          <h1>F1 Manager</h1>
+          <span className="round-badge">
+            Round {roundNumber}/{season.calendar.length}
+          </span>
+        </div>
         <p className="subtitle">
-          Round {roundNumber} of {season.calendar.length} &middot; {track.name} &middot; {track.totalLaps} laps
-          &middot; managing <strong>{playerDriver.name}</strong> ({getTeam(playerDriver.teamId).name})
+          {track.name} &middot; {track.totalLaps} laps &middot; managing{" "}
+          <strong>{playerDriver.name}</strong> ({getTeam(playerDriver.teamId).name})
         </p>
       </header>
 

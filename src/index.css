@@ -1,71 +1,62 @@
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  /* F1-inspired palette: black base, red as the primary accent, yellow as a
+     secondary highlight, white for high-contrast text. This is a deliberate
+     brand choice, not a light/dark preference — the app always renders dark. */
+  --bg: #0a0a0a;
+  --bg-deep: #050505;
+  --panel-bg: #141414;
+  --panel-bg-2: #1c1c1c;
+  --code-bg: #1a1a1a;
+  --border: #2a2a2a;
+  --border-strong: #3d3d3d;
 
-  --wear-low: #2ecc71;
-  --wear-mid: #f1c40f;
-  --wear-high: #e74c3c;
-  --panel-bg: #f7f6f2;
+  --text: #9a9a9a;
+  --text-h: #f5f5f5;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  --red: #e10600;
+  --red-dim: rgba(225, 6, 0, 0.16);
+  --red-glow: rgba(225, 6, 0, 0.55);
+  --yellow: #ffd400;
+  --yellow-dim: rgba(255, 212, 0, 0.16);
+  --white: #ffffff;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
+  --accent: var(--red);
+  --accent-bg: var(--red-dim);
+  --accent-border: rgba(225, 6, 0, 0.5);
+  --on-accent: #ffffff;
+
+  --wear-low: #3ddc71;
+  --wear-mid: var(--yellow);
+  --wear-high: var(--red);
+
+  --shadow: rgba(0, 0, 0, 0.6) 0 10px 25px -5px, rgba(0, 0, 0, 0.4) 0 4px 10px -4px;
+
+  --sans: "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+  --heading: "Titillium Web", "Inter", system-ui, sans-serif;
+  --mono: ui-monospace, "Titillium Web", Consolas, monospace;
+
+  font: 16px/150% var(--sans);
+  letter-spacing: 0.1px;
+  color-scheme: dark;
   color: var(--text);
-  background: var(--bg);
+  background: var(--bg-deep);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-    --panel-bg: #1c1d24;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
 }
 
 #root {
-  width: 1126px;
+  width: 100%;
   max-width: 100%;
   margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
+  text-align: left;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  background: var(--bg);
+  background-image: radial-gradient(ellipse 1200px 500px at 50% -10%, rgba(225, 6, 0, 0.1), transparent 60%);
 }
 
 body {
@@ -73,30 +64,34 @@ body {
 }
 
 h1,
-h2 {
+h2,
+h3 {
   font-family: var(--heading);
-  font-weight: 500;
+  font-weight: 700;
   color: var(--text-h);
+  text-transform: uppercase;
 }
 
 h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
+  font-size: 34px;
+  letter-spacing: 0.5px;
+  font-style: italic;
+  margin: 0;
 }
+
 h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
+  font-size: 15px;
+  line-height: 120%;
+  letter-spacing: 1px;
+  margin: 0 0 10px;
 }
+
+h3 {
+  font-size: 12px;
+  letter-spacing: 0.8px;
+  margin: 0 0 8px;
+}
+
 p {
   margin: 0;
 }
