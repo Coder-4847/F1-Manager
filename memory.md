@@ -57,7 +57,7 @@ Opens at `http://localhost:5173`. `npm run build` produces the static
 
 ## Architecture
 
-Current as of phase 18 (2026-09-12) — kept in sync with `src/` on every phase;
+Current as of phase 19 (2026-09-12) — kept in sync with `src/` on every phase;
 if this ever drifts, `find src -type f | sort` is the source of truth.
 
 ```
@@ -103,6 +103,10 @@ src/
                       mechanical damage alone brings out a VSC, never SC),
                       plus the lap-time/pit-loss multipliers and the SC
                       gap-closure rate used by raceEngine. Phase 17.
+    difficulty.ts     Difficulty = "easy"|"normal"|"hard" and
+                      AI_SPEED_MULTIPLIER (0.8/1/1.2) — the only thing
+                      difficulty affects: AI (never player) lap-time pace
+                      in raceEngine.ts's simulateLap. Phase 19.
     development.ts    Team development & budget: TeamDevelopment
                       {budget, paceLevel, reliabilityLevel,
                       tireManagementLevel}, upgradeCost (rising per level,
@@ -163,7 +167,17 @@ src/
                       directly rather than threading development through
                       every roll function. `runQualifying` also takes
                       development so a pace upgrade actually improves grid
-                      position, not just race pace.
+                      position, not just race pace. `RaceState.difficulty`
+                      (phase 19) is baked in by `setupRace` from
+                      `RaceSetup.difficulty` (defaults `"normal"`) and read
+                      by `simulateLap` each lap: a non-player car's raw lap
+                      time is divided by `AI_SPEED_MULTIPLIER[difficulty]`
+                      (higher speed = lower time) — the player's own
+                      `rawLapTime` is never touched. Deliberately *not*
+                      applied to `runQualifying`'s pace, to keep the
+                      feature scoped to exactly what was asked ("AI go at
+                      X speed" during the race) rather than also
+                      reshuffling the starting grid.
     season.ts         Season calendar (SeasonRound[] — trackId + custom laps,
                       phase 12), per-round results, cumulative driver/
                       constructor points (classic 25-18-15-...-1, 0 for
@@ -209,7 +223,16 @@ src/
                       site sidesteps that staleness; only the very first
                       lazy `setupRace` call still uses a hook option
                       (`initialTeamDevelopment`), since that one only ever
-                      runs once at mount.
+                      runs once at mount. `difficulty` (phase 19) rides
+                      along the same way — `reset`/`switchTrack` take it as
+                      an explicit argument and only the initial lazy
+                      `setupRace` call reads `initialDifficulty` — even
+                      though difficulty doesn't have teamDevelopment's
+                      same-tick staleness problem (it isn't recomputed by
+                      `useSeason` the way `teamDevelopment` is), matching
+                      the established pattern here keeps a difficulty
+                      change picked up correctly by the very next race
+                      regardless of render timing.
     useSeason.ts      Wraps useRace: advances to the next round's track when
                       a race finishes, tracks season points, restart/season-
                       complete/custom-season, save/load, and (phase 18)
@@ -223,22 +246,33 @@ src/
     driverProfile.ts  localStorage persistence for the player's edited
                       name/age/nationality/number, separate from the season
                       save (key `f1-manager-driver-profile-v1`). Phase 11.
+    difficulty.ts     localStorage persistence for the chosen `Difficulty`
+                      (key `f1-manager-difficulty-v1`), same
+                      separate-from-the-season-save pattern as
+                      driverProfile.ts — it's an app-wide setting, not part
+                      of any one season. `loadDifficulty()` defaults to
+                      `"normal"` when nothing's stored yet or storage
+                      throws. Phase 19.
     persistence.ts    localStorage save/load of the whole season
                       ({season, raceState} as one JSON blob). Key is
-                      currently `f1-manager-save-v7` — bumped each time
+                      currently `f1-manager-save-v8` — bumped each time
                       CarState/RaceState/SeasonState gains a field an old
                       save wouldn't have (v3: custom-season calendar shape;
                       v4: weather + damage fields; v5: penaltySeconds/retired/
                       damageDescription; v6: RaceState.caution; v7:
                       CarState.reliabilityMultiplier/tireWearMultiplier +
-                      SeasonState.teamDevelopment). Bump again next time the
-                      schema changes.
+                      SeasonState.teamDevelopment; v8: RaceState.difficulty).
+                      Bump again next time the schema changes.
 
   ui/             Presentational components, one concern each.
     MainMenu.tsx        Full-screen title menu (Play/Resume, Custom Season,
                       Edit Driver, Team Development, Load Saved Game) — the
                       app opens here. Phase 16, Team Development button
-                      added phase 18.
+                      added phase 18, Easy/Normal/Hard difficulty toggle
+                      added phase 19 (a hint line appears once a race has
+                      already been started, since the change only takes
+                      effect on the next race — Reset/Next Round/Restart/
+                      Custom Season — not the one in progress).
     DriverProfile.tsx   "Edit Driver" modal — name/age/nationality/number.
                       Phase 11.
     SeasonSetup.tsx     "Custom Season" modal — build a calendar from any of
@@ -926,6 +960,58 @@ src/
       season, reloaded the page cold, loaded the save, and confirmed the
       budget came back at 0 (not the prior season's spent-down state) with
       zero console/server errors across the whole session.
+
+19. **Difficulty system** — the last feature requested; the user considers the game
+    feature-complete after this phase. A three-way Easy/Normal/Hard toggle
+    (`ui/MainMenu.tsx`) that scales AI pace only:
+    - **Model** (new `sim/difficulty.ts`): `AI_SPEED_MULTIPLIER` — easy 0.8,
+      normal 1, hard 1.2 — is the entire mechanic. In `raceEngine.ts`'s
+      `simulateLap`, a non-player car's raw lap time is divided by that
+      multiplier (a speed multiplier above 1 means faster, so it divides
+      into a time rather than multiplying); the player's own `rawLapTime`
+      is never touched, and per-lap noise/tire wear/damage/etc. are
+      untouched too — this is purely a pace shift, not a difficulty
+      applied to the odds of anything. Deliberately *not* applied to
+      `runQualifying`'s grid-order pace, to keep the change scoped to
+      exactly what was asked (AI race pace) rather than also reshuffling
+      starting positions.
+    - **Persistence**: stored in its own localStorage key
+      (`state/difficulty.ts`, `f1-manager-difficulty-v1`, defaults
+      `"normal"`) separate from the season save — same reasoning as
+      `driverProfile.ts`: it's an app-wide setting, not part of any one
+      season or race. `RaceState` itself gained a required `difficulty`
+      field (baked in once at `setupRace` and read every lap by
+      `simulateLap`), so the season-save key bumped to
+      `f1-manager-save-v8`.
+    - **Change timing**: picking a new difficulty in the menu updates
+      `App.tsx` state and localStorage immediately, but an *already
+      running* race keeps whatever difficulty it was set up with — the
+      new value only reaches `setupRace` the next time one is called
+      (Reset, Next Round, Restart, or a fresh Custom Season). `MainMenu`
+      shows a one-line hint to this effect whenever a race is already
+      under way (`hasStartedRace`). This mirrors phase 18's teamDevelopment
+      wiring almost exactly: `useRace`'s `reset`/`switchTrack` take
+      `difficulty` as an explicit call argument (not a captured hook
+      option) for the same reason — even though difficulty doesn't
+      actually have teamDevelopment's same-tick staleness bug (nothing
+      recomputes it mid-callback the way `completeRound` recomputes
+      `teamDevelopment`), matching the established pattern was simpler
+      than reasoning out whether a plain captured option would've been
+      safe here too.
+    - Verified in-browser: a deterministic console test (importing
+      `raceEngine.ts` directly, same technique as phases 15/17/18) called
+      `setupRace`+`simulateLap` with a constant random source at each of
+      the three difficulties and confirmed the AI car's lap time was
+      exactly 100s/80s/66.67s (easy/normal/hard — 80s ÷ 0.8/1/1.2) while
+      the player's lap time stayed fixed at 81.5s in all three. Then live
+      play: selected Hard from the menu, started a race, and watched the
+      player (a mid-pack car/driver) sink to P11 within 3 laps as the AI
+      pulled away; reset mid-race with Hard still selected and confirmed
+      (via the save file) the *new* race's `difficulty` was `"hard"`
+      where the very first race of the session — created before any menu
+      click — had correctly stayed `"normal"`; saved and inspected
+      `f1-manager-save-v8` directly to confirm the field round-trips.
+      Zero console errors throughout, `tsc -b` clean.
 
 ## A real bug that was found and fixed (worth knowing about)
 
