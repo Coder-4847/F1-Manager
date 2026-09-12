@@ -13,9 +13,10 @@ export interface RaceResultsProps {
   trackName: string;
   results: FinalResultRow[];
   onClose: () => void;
+  onManageDevelopment: () => void;
 }
 
-export function RaceResults({ trackName, results, onClose }: RaceResultsProps) {
+export function RaceResults({ trackName, results, onClose, onManageDevelopment }: RaceResultsProps) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal modal--wide race-results" onClick={(e) => e.stopPropagation()}>
@@ -68,7 +69,9 @@ export function RaceResults({ trackName, results, onClose }: RaceResultsProps) {
         </div>
 
         <div className="driver-profile__actions">
-          <span />
+          <button type="button" onClick={onManageDevelopment}>
+            Manage Development Budget
+          </button>
           <div className="driver-profile__actions-right">
             <button className="driver-profile__save" type="button" onClick={onClose}>
               Close

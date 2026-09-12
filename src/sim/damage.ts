@@ -72,7 +72,7 @@ export function rollForDamage(
 ): DamageEvent | null {
   const aggressionFactor = 0.7 + (car.driver.stats.aggression / 100) * 0.6;
   const riskFactor = weatherRiskMultiplier(car.currentCompound, weather);
-  if (random() >= DAMAGE_CHANCE_PER_LAP * aggressionFactor * riskFactor) return null;
+  if (random() >= DAMAGE_CHANCE_PER_LAP * aggressionFactor * riskFactor * car.reliabilityMultiplier) return null;
 
   const severityRoll = random();
   if (severityRoll < MINOR_THRESHOLD) {

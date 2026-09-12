@@ -38,12 +38,13 @@ export function calculateLapTime(
 
   // Higher tireManagement stat -> lower wear multiplier (0.6-1.0 range).
   const managementFactor = 1 - (car.driver.stats.tireManagement / 100) * 0.4;
-  const wearPenalty = tireWearPenalty(
-    car.currentCompound,
-    car.tireAge,
-    track.tireWearFactor,
-    managementFactor * DRIVING_MODE_WEAR_MULTIPLIER[car.drivingMode]
-  );
+  const wearPenalty =
+    tireWearPenalty(
+      car.currentCompound,
+      car.tireAge,
+      track.tireWearFactor,
+      managementFactor * DRIVING_MODE_WEAR_MULTIPLIER[car.drivingMode]
+    ) * car.tireWearMultiplier;
 
   const lapsRemainingFraction = Math.max(0, track.totalLaps - car.lapsCompleted) / track.totalLaps;
   const fuelPenalty = MAX_FUEL_PENALTY_SECONDS * lapsRemainingFraction;

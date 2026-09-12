@@ -12,6 +12,7 @@ import {
 import { weatherMismatch } from "../sim/weather";
 import type { DrivingMode, PitStopPlan, RaceState, TireCompound, Track } from "../sim/types";
 import type { InitialStrategy } from "../sim/strategy";
+import type { TeamDevelopment } from "../sim/development";
 
 export type PlaybackSpeed = 0.5 | 1 | 2 | 4;
 
@@ -28,6 +29,10 @@ export interface UseRaceOptions {
   initialTrack: Track;
   playerDriverId: string;
   playerStrategy: InitialStrategy;
+  /** Development for the very first race only (lazy initial state, evaluated once at
+   *  mount). `reset`/`switchTrack` take a fresh value explicitly instead of relying on a
+   *  captured option — see the comment on `switchTrack` below for why that matters. */
+  initialTeamDevelopment: Record<string, TeamDevelopment>;
 }
 
 /**
@@ -35,9 +40,9 @@ export interface UseRaceOptions {
  * reactive prop) so a loaded save's track and a manual track switch both
  * flow through the same single source of truth: raceState.track.
  */
-export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRaceOptions) {
+export function useRace({ initialTrack, playerDriverId, playerStrategy, initialTeamDevelopment }: UseRaceOptions) {
   const [raceState, setRaceState] = useState<RaceState>(() =>
-    setupRace({ track: initialTrack, playerDriverId, playerStrategy })
+    setupRace({ track: initialTrack, playerDriverId, playerStrategy, teamDevelopment: initialTeamDevelopment })
   );
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
@@ -127,25 +132,33 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
   const play = useCallback(() => setPlaying(true), []);
   const pause = useCallback(() => setPlaying(false), []);
 
-  const reset = useCallback(() => {
-    setPlaying(false);
-    setDamageAlert(false);
-    setWeatherAlert(false);
-    setCautionAlert(false);
-    setPlanPending(true);
-    lastCheckedLapRef.current = 0;
-    setRaceState((prev) => setupRace({ track: prev.track, playerDriverId, playerStrategy }));
-  }, [playerDriverId, playerStrategy]);
-
-  const switchTrack = useCallback(
-    (track: Track) => {
+  // Both reset and switchTrack take `teamDevelopment` as an explicit argument rather than
+  // closing over a hook option — useSeason calls these in the same tick it computes a new
+  // SeasonState (completeRound/createSeason), before React re-renders useRace with a fresh
+  // option value, so a captured option here would still read the *previous* round's
+  // development. Passing it explicitly at the call site sidesteps that staleness entirely.
+  const reset = useCallback(
+    (teamDevelopment: Record<string, TeamDevelopment>) => {
       setPlaying(false);
       setDamageAlert(false);
       setWeatherAlert(false);
       setCautionAlert(false);
       setPlanPending(true);
       lastCheckedLapRef.current = 0;
-      setRaceState(setupRace({ track, playerDriverId, playerStrategy }));
+      setRaceState((prev) => setupRace({ track: prev.track, playerDriverId, playerStrategy, teamDevelopment }));
+    },
+    [playerDriverId, playerStrategy]
+  );
+
+  const switchTrack = useCallback(
+    (track: Track, teamDevelopment: Record<string, TeamDevelopment>) => {
+      setPlaying(false);
+      setDamageAlert(false);
+      setWeatherAlert(false);
+      setCautionAlert(false);
+      setPlanPending(true);
+      lastCheckedLapRef.current = 0;
+      setRaceState(setupRace({ track, playerDriverId, playerStrategy, teamDevelopment }));
     },
     [playerDriverId, playerStrategy]
   );

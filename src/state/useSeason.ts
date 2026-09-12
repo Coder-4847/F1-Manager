@@ -7,9 +7,12 @@ import {
   getConstructorStandings,
   getDriverStandings,
   isSeasonComplete,
+  purchaseTeamUpgrade,
 } from "../sim/season";
 import type { SeasonRound, SeasonState } from "../sim/season";
 import type { InitialStrategy } from "../sim/strategy";
+import type { UpgradeCategory } from "../sim/development";
+import { getDriver } from "../sim/roster";
 import { hasSeasonSave, loadSeasonProgress, saveSeasonProgress } from "./persistence";
 
 export interface UseSeasonOptions {
@@ -19,6 +22,7 @@ export interface UseSeasonOptions {
 
 export function useSeason({ playerDriverId, playerStrategy }: UseSeasonOptions) {
   const [season, setSeason] = useState<SeasonState>(() => createSeason());
+  const playerTeamId = getDriver(playerDriverId).teamId;
 
   // Computed once, lazily, at mount — a fresh season's round 1 track is
   // always valid. Recomputing this from `season` on every render would crash
@@ -28,6 +32,7 @@ export function useSeason({ playerDriverId, playerStrategy }: UseSeasonOptions) 
     initialTrack,
     playerDriverId,
     playerStrategy,
+    initialTeamDevelopment: season.teamDevelopment,
   });
 
   const seasonComplete = isSeasonComplete(season);
@@ -37,7 +42,7 @@ export function useSeason({ playerDriverId, playerStrategy }: UseSeasonOptions) 
     const updated = completeRound(season, race.standings);
     setSeason(updated);
     const nextTrack = currentRoundTrack(updated);
-    if (nextTrack) race.switchTrack(nextTrack);
+    if (nextTrack) race.switchTrack(nextTrack, updated.teamDevelopment);
   }, [race, season, seasonComplete]);
 
   // Restarts using the *current* calendar (default or custom) — a season built
@@ -45,16 +50,24 @@ export function useSeason({ playerDriverId, playerStrategy }: UseSeasonOptions) 
   const restartSeason = useCallback(() => {
     const fresh = createSeason(season.calendar);
     setSeason(fresh);
-    race.switchTrack(currentRoundTrack(fresh)!);
+    race.switchTrack(currentRoundTrack(fresh)!, fresh.teamDevelopment);
   }, [race, season.calendar]);
 
   const startCustomSeason = useCallback(
     (calendar: SeasonRound[]) => {
       const fresh = createSeason(calendar);
       setSeason(fresh);
-      race.switchTrack(currentRoundTrack(fresh)!);
+      race.switchTrack(currentRoundTrack(fresh)!, fresh.teamDevelopment);
     },
     [race]
+  );
+
+  /** Buys one level of a development category for the player's own team. */
+  const purchaseUpgrade = useCallback(
+    (category: UpgradeCategory) => {
+      setSeason((prev) => purchaseTeamUpgrade(prev, playerTeamId, category));
+    },
+    [playerTeamId]
   );
 
   const [hasSave, setHasSave] = useState(() => hasSeasonSave());
@@ -76,11 +89,13 @@ export function useSeason({ playerDriverId, playerStrategy }: UseSeasonOptions) 
     season,
     race,
     seasonComplete,
+    playerTeamId,
     driverStandings: getDriverStandings(season),
     constructorStandings: getConstructorStandings(season),
     advanceToNextRound,
     restartSeason,
     startCustomSeason,
+    purchaseUpgrade,
     hasSave,
     saveProgress,
     loadProgress,

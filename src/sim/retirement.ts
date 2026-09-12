@@ -63,6 +63,8 @@ export function rollForRetirement(
     chance += PUSH_MODE_BASE_CONTRIBUTION + (car.driver.stats.aggression / 100) * PUSH_MODE_AGGRESSION_CONTRIBUTION;
   }
 
+  chance *= car.reliabilityMultiplier;
+
   if (random() >= chance) return null;
 
   return { reason: pickReason(car, hasDamage, mismatch, pushing, random) };

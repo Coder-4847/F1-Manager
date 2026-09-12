@@ -7,6 +7,7 @@ export interface MainMenuProps {
   onPlay: () => void;
   onCustomSeason: () => void;
   onEditDriver: () => void;
+  onTeamDevelopment: () => void;
   onLoad: () => void;
 }
 
@@ -19,6 +20,7 @@ export function MainMenu({
   onPlay,
   onCustomSeason,
   onEditDriver,
+  onTeamDevelopment,
   onLoad,
 }: MainMenuProps) {
   return (
@@ -41,6 +43,9 @@ export function MainMenu({
           </button>
           <button className="main-menu__btn" onClick={onEditDriver}>
             Edit Driver
+          </button>
+          <button className="main-menu__btn" onClick={onTeamDevelopment}>
+            Team Development
           </button>
           {hasSave && (
             <button className="main-menu__btn" onClick={onLoad}>

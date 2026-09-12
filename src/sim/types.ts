@@ -124,6 +124,12 @@ export interface CarState {
   /** Cumulative time penalties (seconds) applied this race, added directly into totalTimeSeconds — tracked
    *  separately too so the final results screen can show it as its own column. */
   penaltySeconds: number;
+  /** Multiplies damage/retirement roll chance — 1 = no team development, lower = a team's
+   *  reliability upgrades. Baked in once at car creation from that round's TeamDevelopment. */
+  reliabilityMultiplier: number;
+  /** Multiplies tire wear penalty — 1 = no team development, lower = a team's tire
+   *  management upgrades. Baked in once at car creation from that round's TeamDevelopment. */
+  tireWearMultiplier: number;
 }
 
 export interface LapEvent {

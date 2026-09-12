@@ -21,6 +21,7 @@ import { RacingPlan } from "./ui/RacingPlan";
 import { RevisePlan } from "./ui/RevisePlan";
 import { RaceResults } from "./ui/RaceResults";
 import { MainMenu } from "./ui/MainMenu";
+import { TeamDevelopment } from "./ui/TeamDevelopment";
 import { WeatherForecast } from "./ui/WeatherForecast";
 import type { InitialStrategy } from "./sim/strategy";
 import type { SeasonRound } from "./sim/season";
@@ -47,11 +48,13 @@ function App() {
     season,
     race,
     seasonComplete,
+    playerTeamId,
     driverStandings,
     constructorStandings,
     advanceToNextRound,
     restartSeason,
     startCustomSeason,
+    purchaseUpgrade,
     hasSave,
     saveProgress,
     loadProgress,
@@ -90,6 +93,7 @@ function App() {
   const [showSeasonSetup, setShowSeasonSetup] = useState(false);
   const [showRevisePlan, setShowRevisePlan] = useState(false);
   const [showRaceResults, setShowRaceResults] = useState(false);
+  const [showTeamDevelopment, setShowTeamDevelopment] = useState(false);
 
   // Regenerated once per lap (not every render) — a preview, not a guarantee, same as
   // the one shown pre-race and in the weather alert; see generateWeatherForecast.
@@ -152,6 +156,7 @@ function App() {
           onPlay={() => setShowMenu(false)}
           onCustomSeason={() => setShowSeasonSetup(true)}
           onEditDriver={() => setShowProfileEditor(true)}
+          onTeamDevelopment={() => setShowTeamDevelopment(true)}
           onLoad={handleLoadFromMenu}
         />
 
@@ -175,6 +180,15 @@ function App() {
             initialCalendar={season.calendar}
             onStart={handleStartCustomSeason}
             onClose={() => setShowSeasonSetup(false)}
+          />
+        )}
+
+        {showTeamDevelopment && (
+          <TeamDevelopment
+            teamName={playerTeam.name}
+            development={season.teamDevelopment[playerTeamId]}
+            onBuy={purchaseUpgrade}
+            onClose={() => setShowTeamDevelopment(false)}
           />
         )}
       </>
@@ -276,6 +290,16 @@ function App() {
           trackName={track.name}
           results={getFinalResults(raceState)}
           onClose={() => setShowRaceResults(false)}
+          onManageDevelopment={() => setShowTeamDevelopment(true)}
+        />
+      )}
+
+      {showTeamDevelopment && (
+        <TeamDevelopment
+          teamName={playerTeam.name}
+          development={season.teamDevelopment[playerTeamId]}
+          onBuy={purchaseUpgrade}
+          onClose={() => setShowTeamDevelopment(false)}
         />
       )}
 
@@ -291,7 +315,7 @@ function App() {
         onPlay={play}
         onPause={pause}
         onStep={step}
-        onReset={reset}
+        onReset={() => reset(season.teamDevelopment)}
         onSetSpeed={setSpeed}
         onSave={saveProgress}
         onLoad={loadProgress}

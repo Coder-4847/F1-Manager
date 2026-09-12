@@ -1,12 +1,23 @@
 import type { StandingsRow } from "./raceEngine";
-import { drivers, getTeam } from "./roster";
+import { drivers, getTeam, teams } from "./roster";
 import { getTrack, tracks } from "./tracks";
 import type { Track } from "./types";
+import { aiAutoSpend, createInitialDevelopment, purchaseUpgrade } from "./development";
+import type { TeamDevelopment, UpgradeCategory } from "./development";
 
 const POINTS_TABLE = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 
 export function pointsForPosition(position: number): number {
   return POINTS_TABLE[position - 1] ?? 0;
+}
+
+// A per-race payout, not a real-world prize fund figure — every position earns something
+// (unlike points, which run dry after 10th) so every team's budget grows every round,
+// just much faster for whoever's running at the front.
+const PRIZE_TABLE = [500, 400, 350, 300, 260, 220, 190, 160, 130, 100, 80, 60, 45, 30, 20, 10];
+
+export function prizeForPosition(position: number): number {
+  return PRIZE_TABLE[position - 1] ?? PRIZE_TABLE[PRIZE_TABLE.length - 1];
 }
 
 export interface SeasonRound {
@@ -28,6 +39,9 @@ export interface SeasonState {
   roundIndex: number;
   driverPoints: Record<string, number>;
   results: RoundResult[];
+  /** Per-team budget + upgrade levels, keyed by team id. Resets with every new/restarted
+   *  season — see completeRound for how it grows and development.ts for what it does. */
+  teamDevelopment: Record<string, TeamDevelopment>;
 }
 
 export function defaultCalendar(): SeasonRound[] {
@@ -40,6 +54,7 @@ export function createSeason(calendar: SeasonRound[] = defaultCalendar()): Seaso
     roundIndex: 0,
     driverPoints: Object.fromEntries(drivers.map((d) => [d.id, 0])),
     results: [],
+    teamDevelopment: createInitialDevelopment(teams.map((t) => t.id)),
   };
 }
 
@@ -59,7 +74,13 @@ export function currentRoundTrack(season: SeasonState): Track | null {
   return round ? { ...getTrack(round.trackId), totalLaps: round.laps } : null;
 }
 
-/** Records a finished race's standings into the season and advances to the next round. */
+/**
+ * Records a finished race's standings into the season, pays out prize money to every
+ * team (summed across both its drivers — a shared team budget, not a per-driver one),
+ * lets every AI-controlled team auto-invest its new budget, and advances to the next round.
+ * The player's own team is excluded from auto-spend — they manage it themselves via the
+ * Team Development screen, using whatever budget accumulates here.
+ */
 export function completeRound(season: SeasonState, standings: StandingsRow[]): SeasonState {
   const round = currentRound(season);
   if (!round) return season;
@@ -75,6 +96,20 @@ export function completeRound(season: SeasonState, standings: StandingsRow[]): S
     driverPoints[entry.driverId] = (driverPoints[entry.driverId] ?? 0) + entry.points;
   }
 
+  const prizeByTeam = new Map<string, number>();
+  for (const row of standings) {
+    const prize = row.car.retired ? 0 : prizeForPosition(row.position);
+    prizeByTeam.set(row.car.team.id, (prizeByTeam.get(row.car.team.id) ?? 0) + prize);
+  }
+  const playerTeamId = standings.find((row) => row.car.isPlayer)?.car.team.id;
+
+  const teamDevelopment = { ...season.teamDevelopment };
+  for (const [teamId, prize] of prizeByTeam) {
+    const current = teamDevelopment[teamId] ?? { budget: 0, paceLevel: 0, reliabilityLevel: 0, tireManagementLevel: 0 };
+    const withPrize = { ...current, budget: current.budget + prize };
+    teamDevelopment[teamId] = teamId === playerTeamId ? withPrize : aiAutoSpend(withPrize);
+  }
+
   const result: RoundResult = {
     trackId: round.trackId,
     trackName: getTrack(round.trackId).name,
@@ -86,7 +121,18 @@ export function completeRound(season: SeasonState, standings: StandingsRow[]): S
     roundIndex: season.roundIndex + 1,
     driverPoints,
     results: [...season.results, result],
+    teamDevelopment,
   };
+}
+
+/** Buys one level of a category for a team, returning a new SeasonState — a no-op
+ *  (returns the same season) if that team can't afford it or is already maxed out. */
+export function purchaseTeamUpgrade(season: SeasonState, teamId: string, category: UpgradeCategory): SeasonState {
+  const current = season.teamDevelopment[teamId];
+  if (!current) return season;
+  const updated = purchaseUpgrade(current, category);
+  if (updated === current) return season;
+  return { ...season, teamDevelopment: { ...season.teamDevelopment, [teamId]: updated } };
 }
 
 export interface DriverStandingRow {

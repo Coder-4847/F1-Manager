@@ -16,6 +16,8 @@ import {
   SC_GAP_CLOSURE_RATE,
   SC_MIN_GAP_SECONDS,
 } from "./caution";
+import { paceBonusForLevel, reliabilityMultiplierForLevel, tireWearMultiplierForLevel } from "./development";
+import type { TeamDevelopment } from "./development";
 import { drivers, getTeam } from "./roster";
 
 export interface RaceSetup {
@@ -23,14 +25,25 @@ export interface RaceSetup {
   /** driverId of the car the player controls. */
   playerDriverId: string;
   playerStrategy: InitialStrategy;
+  /** This season's per-team development (pace/reliability/tire management + budget), keyed
+   *  by team id. Omitted entirely (e.g. a standalone test setup) means no team has upgrades. */
+  teamDevelopment?: Record<string, TeamDevelopment>;
   random?: () => number;
 }
 
-function createCarState(driver: Driver, isPlayer: boolean, strategy: InitialStrategy): CarState {
-  const team = getTeam(driver.teamId);
+/** A team's carPerformance with that round's pace development folded in — a car-scoped
+ *  shallow copy, same reasoning as currentRoundTrack's per-round lap-count override: the
+ *  shared roster.ts team objects are never mutated. */
+function developedTeam(teamId: string, development?: TeamDevelopment) {
+  const base = getTeam(teamId);
+  if (!development) return base;
+  return { ...base, carPerformance: base.carPerformance + paceBonusForLevel(development.paceLevel) };
+}
+
+function createCarState(driver: Driver, isPlayer: boolean, strategy: InitialStrategy, development?: TeamDevelopment): CarState {
   return {
     driver,
-    team,
+    team: developedTeam(driver.teamId, development),
     totalTimeSeconds: 0,
     currentCompound: strategy.startingCompound,
     tireAge: 0,
@@ -43,6 +56,8 @@ function createCarState(driver: Driver, isPlayer: boolean, strategy: InitialStra
     lapTimes: [],
     damagePenaltySeconds: 0,
     penaltySeconds: 0,
+    reliabilityMultiplier: development ? reliabilityMultiplierForLevel(development.reliabilityLevel) : 1,
+    tireWearMultiplier: development ? tireWearMultiplierForLevel(development.tireManagementLevel) : 1,
   };
 }
 
@@ -52,10 +67,10 @@ function createCarState(driver: Driver, isPlayer: boolean, strategy: InitialStra
  * returning driver ids fastest to slowest. This decides the starting grid; without it,
  * lap 1 order was arbitrary (roster order), which made every race play out the same way.
  */
-function runQualifying(random: () => number): string[] {
+function runQualifying(random: () => number, teamDevelopment?: Record<string, TeamDevelopment>): string[] {
   return [...drivers]
     .map((driver) => {
-      const team = getTeam(driver.teamId);
+      const team = developedTeam(driver.teamId, teamDevelopment?.[driver.teamId]);
       const pace = 0.5 * team.carPerformance + 0.5 * driver.stats.pace + (random() - 0.5) * 6;
       return { id: driver.id, pace };
     })
@@ -65,11 +80,12 @@ function runQualifying(random: () => number): string[] {
 
 export function setupRace(setup: RaceSetup): RaceState {
   const random = setup.random ?? Math.random;
-  const gridOrder = runQualifying(random);
+  const gridOrder = runQualifying(random, setup.teamDevelopment);
   const cars: CarState[] = drivers.map((driver) => {
     const isPlayer = driver.id === setup.playerDriverId;
     const strategy = isPlayer ? setup.playerStrategy : generateAIStrategy(driver, setup.track, random);
-    const car = createCarState(driver, isPlayer, strategy);
+    const development = setup.teamDevelopment?.[driver.teamId];
+    const car = createCarState(driver, isPlayer, strategy, development);
     // A tiny, race-irrelevant time offset by grid slot — just enough to break the lap-0
     // "everyone's at 0.0s" tie in qualifying order instead of arbitrary roster order.
     car.totalTimeSeconds = gridOrder.indexOf(driver.id) * 0.001;

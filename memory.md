@@ -57,7 +57,7 @@ Opens at `http://localhost:5173`. `npm run build` produces the static
 
 ## Architecture
 
-Current as of phase 17 (2026-09-12) — kept in sync with `src/` on every phase;
+Current as of phase 18 (2026-09-12) — kept in sync with `src/` on every phase;
 if this ever drifts, `find src -type f | sort` is the source of truth.
 
 ```
@@ -103,6 +103,17 @@ src/
                       mechanical damage alone brings out a VSC, never SC),
                       plus the lap-time/pit-loss multipliers and the SC
                       gap-closure rate used by raceEngine. Phase 17.
+    development.ts    Team development & budget: TeamDevelopment
+                      {budget, paceLevel, reliabilityLevel,
+                      tireManagementLevel}, upgradeCost (rising per level,
+                      capped at MAX_UPGRADE_LEVEL = 5), purchaseUpgrade,
+                      paceBonusForLevel/reliabilityMultiplierForLevel/
+                      tireWearMultiplierForLevel (the actual in-race effects),
+                      and aiAutoSpend (weighted toward whichever category an
+                      AI team is lagging in, capped at 2 purchases/round).
+                      Lives in SeasonState, not roster.ts — resets every
+                      season the same way custom-calendar lap counts do.
+                      Phase 18.
     lapTime.ts        Per-lap time = base pace + tire wear + fuel burn-off +
                       driving-mode delta + weather penalty + randomness
                       (scaled by consistency and conditions) + active damage.
@@ -140,10 +151,37 @@ src/
                       keeps a freshly-triggered caution from being
                       decremented the same lap it's set. getStandings (DNFs
                       ranked below classified cars) and getFinalResults
-                      (+ best lap) live here too.
+                      (+ best lap) live here too. `createCarState` takes an
+                      optional per-team `TeamDevelopment` (phase 18): pace
+                      is folded into a car-scoped shallow copy of its Team
+                      (`developedTeam` — same shallow-copy-don't-mutate
+                      pattern as season.ts's currentRoundTrack), while
+                      reliability/tire-management become two new required
+                      CarState fields (`reliabilityMultiplier`,
+                      `tireWearMultiplier`, default 1 when no development is
+                      passed) that damage.ts/retirement.ts/lapTime.ts read
+                      directly rather than threading development through
+                      every roll function. `runQualifying` also takes
+                      development so a pace upgrade actually improves grid
+                      position, not just race pace.
     season.ts         Season calendar (SeasonRound[] — trackId + custom laps,
                       phase 12), per-round results, cumulative driver/
-                      constructor points (classic 25-18-15-...-1, 0 for DNFs).
+                      constructor points (classic 25-18-15-...-1, 0 for
+                      DNFs), and per-team development (phase 18):
+                      `SeasonState.teamDevelopment` starts at
+                      `createInitialDevelopment()` (all zero) and
+                      `completeRound` pays every team prize money
+                      (`PRIZE_TABLE`/`prizeForPosition` — unlike points, every
+                      position earns *something*, summed across both a
+                      team's drivers into one shared budget) then runs
+                      `aiAutoSpend` on every team except the player's own
+                      (found via `standings.find(r => r.car.isPlayer)`, not
+                      a parameter — completeRound already has full
+                      StandingsRow[] with `car.team.id`/`car.isPlayer` on
+                      it). `purchaseTeamUpgrade(season, teamId, category)`
+                      is the one place that mutates a team's development
+                      outside of aiAutoSpend/completeRound — used by the
+                      player's own purchases.
 
   state/          React-facing hooks wrapping the sim.
     useRace.ts        Owns one race's live state: play/pause/step/speed,
@@ -160,28 +198,47 @@ src/
                       === raceState.caution.durationLaps` (only true the one
                       lap it's triggered, since raceEngine never decrements a
                       caution the same lap it sets it) rather than parsing
-                      event messages, phase 17.
+                      event messages, phase 17. `reset`/`switchTrack` take
+                      `teamDevelopment` as an explicit call argument rather
+                      than a captured hook option (phase 18) — useSeason
+                      calls these in the same tick it computes a new
+                      SeasonState (completeRound/createSeason), before React
+                      re-renders useRace with a fresh option value, so a
+                      captured option would still read the *previous*
+                      round's development. Passing it explicitly at the call
+                      site sidesteps that staleness; only the very first
+                      lazy `setupRace` call still uses a hook option
+                      (`initialTeamDevelopment`), since that one only ever
+                      runs once at mount.
     useSeason.ts      Wraps useRace: advances to the next round's track when
                       a race finishes, tracks season points, restart/season-
-                      complete/custom-season, save/load. NOTE: computes the
-                      *initial* track via a lazy useState — see "bug found"
-                      below.
+                      complete/custom-season, save/load, and (phase 18)
+                      `purchaseUpgrade(category)` for the player's own team
+                      (derived `playerTeamId` from `getDriver(playerDriverId)
+                      .teamId`, not stored separately) plus passing fresh
+                      `teamDevelopment` into every `race.switchTrack` call —
+                      see the useRace.ts note above for why that has to be
+                      an explicit argument. NOTE: computes the *initial*
+                      track via a lazy useState — see "bug found" below.
     driverProfile.ts  localStorage persistence for the player's edited
                       name/age/nationality/number, separate from the season
                       save (key `f1-manager-driver-profile-v1`). Phase 11.
     persistence.ts    localStorage save/load of the whole season
                       ({season, raceState} as one JSON blob). Key is
-                      currently `f1-manager-save-v6` — bumped each time
-                      CarState/RaceState gains a field an old save wouldn't
-                      have (v3: custom-season calendar shape; v4: weather +
-                      damage fields; v5: penaltySeconds/retired/
-                      damageDescription; v6: RaceState.caution). Bump again
-                      next time the schema changes.
+                      currently `f1-manager-save-v7` — bumped each time
+                      CarState/RaceState/SeasonState gains a field an old
+                      save wouldn't have (v3: custom-season calendar shape;
+                      v4: weather + damage fields; v5: penaltySeconds/retired/
+                      damageDescription; v6: RaceState.caution; v7:
+                      CarState.reliabilityMultiplier/tireWearMultiplier +
+                      SeasonState.teamDevelopment). Bump again next time the
+                      schema changes.
 
   ui/             Presentational components, one concern each.
     MainMenu.tsx        Full-screen title menu (Play/Resume, Custom Season,
-                      Edit Driver, Load Saved Game) — the app opens here.
-                      Phase 16.
+                      Edit Driver, Team Development, Load Saved Game) — the
+                      app opens here. Phase 16, Team Development button
+                      added phase 18.
     DriverProfile.tsx   "Edit Driver" modal — name/age/nationality/number.
                       Phase 11.
     SeasonSetup.tsx     "Custom Season" modal — build a calendar from any of
@@ -210,7 +267,18 @@ src/
                       green/orange/red with damage severity. Phase 16.
     RaceResults.tsx     Auto-opens when a race finishes — final
                       classification, DNFs, best lap, total time, penalties.
-                      Phase 15.
+                      Phase 15. Gained a "Manage Development Budget" button
+                      (phase 18) — the natural moment to spend a round's
+                      just-earned prize money, since the *next* round's
+                      RacingPlan modal blocks reaching Menu (no cancel, by
+                      design — see phase 14's Load-bug entry) until a plan
+                      is confirmed.
+    TeamDevelopment.tsx Budget + three upgrade categories (pace/reliability/
+                      tire management), each with a 0-5 level, rising cost,
+                      and a live effect readout computed from development.ts's
+                      exported bonus functions. Reachable from MainMenu (any
+                      time) and RaceResults ("Manage Development Budget").
+                      Phase 18.
     WeatherForecast.tsx Shared colored-strip + legend component consuming a
                       forecast array — used by RacingPlan, WeatherAlert,
                       RevisePlan, and the always-visible sidebar forecast in
@@ -753,6 +821,109 @@ src/
       confirmed a VSC pit stop costs exactly 0.65× a green-flag one
       (25.4s → 16.5s for the same stop) and that the caution clears with a
       "Green flag!" event exactly on its last lap.
+18. **Team development & budget** — the second of the two features scoped
+    together before phase 17. Scoping questions settled: escalating VSC→SC
+    (already built in 17), an interactive alert (built in 17), prize money
+    by finishing position (not a flat per-round income or one season-long
+    lump sum), and — the biggest scope call — **both the player and every
+    AI team develop**, with progress resetting each season rather than
+    persisting into a multi-season career.
+    - **Model** (new `sim/development.ts`): three upgrade categories —
+      Pace (+1.6 carPerformance/level), Reliability (-9%/level on the
+      damage+retirement roll chance), Tire Management (-7%/level on tire
+      wear) — each 0-5 levels, costing 250/800/1600/2600/3800 to reach the
+      next level (a deliberately steep curve: cheap to dip a toe in, real
+      money needed to push toward the cap). `TeamDevelopment
+      {budget, paceLevel, reliabilityLevel, tireManagementLevel}` lives in
+      `SeasonState.teamDevelopment` (keyed by team id), **not** the shared
+      `roster.ts` team registry — same reasoning as `season.ts`'s
+      per-round lap-count override: it must reset every season, and the
+      registry is shared/global.
+    - **Income**: `PRIZE_TABLE`/`prizeForPosition` in `season.ts` — a
+      16-position payout (500 down to a 10-credit floor) where, unlike the
+      points table, *every* position earns something, so every team's
+      budget grows every round regardless of where they finish. Paid out
+      in `completeRound`, summed across both a team's drivers into one
+      shared team budget (a driver's teammate's result funds the same pool
+      as their own — it's the team's budget, not the driver's).
+    - **AI teams auto-spend**, the player doesn't get a shop UI for them:
+      `aiAutoSpend` (in `development.ts`) attempts up to 2 purchases per
+      round, each in a category weighted toward whichever one that team is
+      currently lagging in (a flat floor keeps a maxed category
+      occasionally "pickable" — and then skipped as unaffordable/capped —
+      rather than a hard exclusion that would make every team converge on
+      identical builds). `completeRound` runs this for every team *except*
+      the player's own (identified via `standings.find(r =>
+      r.car.isPlayer)?.car.team.id`, not a parameter) — the player manages
+      their own team's spending manually through the new
+      `ui/TeamDevelopment.tsx` screen instead.
+    - **Wiring into the race** (`raceEngine.ts`): `createCarState` takes an
+      optional `TeamDevelopment` for that driver's team. Pace becomes a
+      car-scoped shallow copy of Team with carPerformance bumped
+      (`developedTeam()`, mirroring `currentRoundTrack`'s
+      copy-don't-mutate pattern) — `runQualifying` uses the same helper, so
+      a pace upgrade improves grid position too, not just race pace.
+      Reliability and tire management become two new required `CarState`
+      fields, `reliabilityMultiplier`/`tireWearMultiplier` (default 1 when
+      no development is passed, e.g. a standalone test setup), which
+      `damage.ts`/`retirement.ts` multiply into their roll chance and
+      `lapTime.ts` multiplies into the tire wear penalty — reading a field
+      already on the car directly, rather than threading `TeamDevelopment`
+      through every roll function's signature.
+    - **The stale-closure trap this phase had to design around**:
+      `useSeason.advanceToNextRound`/`restartSeason`/`startCustomSeason`
+      all call `setSeason(...)` and then, in the very same callback,
+      `race.switchTrack(...)` — but `race.switchTrack` is a `useCallback`
+      created on the *previous* render, so if it closed over
+      `season.teamDevelopment` as a captured hook option, it would still
+      read the development state from *before* this round's prize
+      money/AI spending was applied (React hasn't re-rendered `useRace`
+      with a fresh option yet when the callback runs). Fixed by having
+      `useRace`'s `reset`/`switchTrack` take `teamDevelopment` as an
+      explicit call argument instead of a hook option — `useSeason` passes
+      the freshly-computed `updated.teamDevelopment`/`fresh.teamDevelopment`
+      it already has in scope, sidestepping the staleness regardless of
+      React's render timing. Only the very first lazy `setupRace` call (at
+      `useRace` mount) still reads a hook option
+      (`initialTeamDevelopment`), since that one only ever runs once,
+      before any round has completed. **Lesson for future sessions**: any
+      time a callback both updates state derived from `useX` and, in the
+      same tick, calls a memoized function *from* `useX`, check whether
+      that function's `useCallback` deps include the data the state update
+      just changed — if the function was created on a prior render, it can
+      still be holding the pre-update value.
+    - **Player UI**: `ui/TeamDevelopment.tsx` — budget, three cards (level
+      dots, live effect readout, next-level cost), reachable any time from
+      `MainMenu` and, more usefully, from `RaceResults`'s new "Manage
+      Development Budget" button right after a round's prize money lands
+      — this matters because the *next* round's `RacingPlan` modal has no
+      cancel/close (a deliberate design from phase 14) and blocks reaching
+      Menu until confirmed, so RaceResults is the only guaranteed window to
+      spend a round's earnings before locking into the next one.
+    - Bumped the season-save key to `f1-manager-save-v7` (`CarState` gained
+      the required `reliabilityMultiplier`/`tireWearMultiplier`,
+      `SeasonState` gained the required `teamDevelopment`).
+    - Verified with a mix of live play and direct console tests (importing
+      `sim/season.ts`/`sim/development.ts`/`sim/raceEngine.ts` the same way
+      phase 17 verified the rare Safety Car path): played a 3-round,
+      6-lap-per-round custom season live — confirmed the player's team
+      budget landed at exactly 270 after round 1 (P5=260 + P16=10, the
+      two Kestrel GP drivers' actual finishing positions that race),
+      spending 250 of it on a Pace upgrade correctly dropped the budget to
+      20 and disabled all three buttons (unaffordable), and a direct
+      `setupRace` call with that development record back confirmed the car
+      actually got `team.carPerformance` 85→86.6, `reliabilityMultiplier`
+      0.82, and `tireWearMultiplier` 0.79 — each matching the category
+      levels exactly. Console-verified `aiAutoSpend` over 8 simulated
+      rounds of income: purchases land, cap at 2/round, spending tracks
+      budget correctly, and levels spread across categories rather than
+      dumping everything into one. Console-verified `purchaseTeamUpgrade`
+      no-ops (returns the same `SeasonState` reference) when unaffordable.
+      Played the season to completion, restarted it, and confirmed
+      `teamDevelopment` reset to all zeros; saved mid-round-1 of the fresh
+      season, reloaded the page cold, loaded the save, and confirmed the
+      budget came back at 0 (not the prior season's spent-down state) with
+      zero console/server errors across the whole session.
 
 ## A real bug that was found and fixed (worth knowing about)
 
@@ -777,11 +948,10 @@ through the exact crash point with zero errors afterward.
   localStorage slot per browser.
 - Battle/overtake resolution is a heuristic model, not physics — tuned to
   "feel fair," not validated against real telemetry.
-- No car development/budget progression across a season — flagged in phase
-  16 as a natural next step (phase 17 built the other one, Safety Car/VSC),
-  deliberately not built without discussing scope first since it's a
-  genuinely large addition (a budget currency, upgrade choices, and per the
-  scoping conversation before phase 17, AI teams developing too).
+- Team development/budget (phase 18) resets every season by design — no
+  multi-season career mode where upgrades persist across a restart. Was an
+  explicit scoping choice, not an oversight; would need new save-schema
+  handling for "carry forward vs. fresh start" if ever revisited.
 
 ## Working style notes for whoever picks this up
 
