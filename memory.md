@@ -1236,6 +1236,49 @@ see their phase entries below for what each does and why.
     plus the two bonus features requested mid-batch (race objectives, rival
     tracker) and the Settings screen tying them all together are complete
     and pushed.
+28. **Hand-shaped tracks for all 12 + real car icons on the live track view**
+    — a tester reported the track shapes and names didn't line up. The root
+    cause: only 4 tracks (Monza, Monaco, Spa, Suzuka) were ever hand-shaped
+    (see phase 8); the other 8 fell back to `generatedLoop` — a wobbly
+    procedural ellipse with no relationship to the real circuit's layout.
+    Fix: hand-authored recognizable (still stylized, not GPS-accurate — same
+    philosophy as the original 4) point sequences in `trackPaths.ts` for
+    Silverstone (esses bulge + hairpin notch), Barcelona (long straight +
+    hairpin loop-back), Red Bull Ring (short/simple but with an asymmetric
+    hairpin point — an early attempt with evenly-spaced points came out as
+    an indistinguishable plain oval, so it needed a deliberate asymmetric
+    spike), Singapore (dense, angular street-circuit zigzag), COTA (esses
+    complex + stadium hairpin cluster), Interlagos (compact oval with the
+    Senna S kink), Yas Marina (long straight + marina corner cluster), and
+    Zandvoort (compact with a sharp Tarzan-hairpin notch). Deliberately did
+    **not** pull in real GPS/GeoJSON track data — mixing hyper-accurate
+    shapes for some tracks with stylized ones for others would look
+    inconsistent, and the project already made "stylized, not GPS-accurate"
+    a deliberate choice for the original 4.
+    - Separately, `LiveTrackView.tsx`'s cars were plain SVG `<circle>`
+      dots. Replaced with a small top-down car silhouette (`CarShape` —
+      rear wing, tapering body, cockpit, front wing, 4 protruding wheels,
+      centered on its own origin with the nose along +X) that's rotated to
+      face its direction of travel every animation frame: sample the path
+      at the car's current position and a small fixed lookahead
+      (`HEADING_LOOKAHEAD = 2` path-length units, not a fraction of lap
+      length, so heading response looks the same on a short and long
+      track), then `Math.atan2` the delta into a heading angle. Applied via
+      a single `transform="translate(...) rotate(...) scale(...)"` on the
+      car's wrapping `<g>`, updated imperatively per frame (same
+      ref-based, non-React-state animation pattern as before, for the same
+      performance reason). Team color fills the body/wings; wheels/cockpit
+      are a fixed dark tone regardless of team color or theme.
+    - Verified by hand-building a custom 1-lap-per-round season through
+      all 8 newly-shaped tracks and screenshotting each (Red Bull Ring's
+      first attempt was visibly a plain oval and got reshaped before
+      shipping); confirmed the car icon renders as a recognizable car
+      silhouette by rendering `CarShape`'s raw markup at 400x400 in
+      isolation in the browser console, and confirmed the live `<g
+      class="live-track__car">` elements carry the expected 8 child shapes
+      and a live-updating transform during actual gameplay. No save-schema
+      change — both files are presentation-only, RaceState/CarState/
+      SeasonState are untouched.
 
 ## A real bug that was found and fixed (worth knowing about)
 

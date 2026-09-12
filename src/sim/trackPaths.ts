@@ -1,6 +1,9 @@
 // Stylized top-down circuit silhouettes for the live track view. These are
-// hand-shaped/generated closed loops that evoke each track's character
-// (tight vs flowing, street vs permanent) — not GPS-accurate maps.
+// hand-shaped closed loops that evoke each track's real character (esses,
+// hairpins, chicanes, long straights, banking) — not GPS-accurate maps. All
+// 12 are now hand-authored (see the phase note in memory.md for why: mixing
+// real GPS data in for some tracks and stylized shapes for others would look
+// inconsistent, so every track gets the same hand-shaped treatment instead).
 
 export interface TrackPath {
   viewBox: string;
@@ -64,7 +67,8 @@ interface GeneratedLoopOptions {
   aspect: number;
 }
 
-/** A varied-but-plausible closed loop for tracks without a hand-authored shape. */
+/** Fallback for any track id without a hand-authored shape (shouldn't happen for the
+ *  12 in tracks.ts, but keeps getTrackPath total for anything unexpected). */
 function generatedLoop(seed: string, opts: GeneratedLoopOptions): TrackPath {
   const rand = mulberry32(hashString(seed));
   const baseRadiusY = VIEWBOX_H * 0.36;
@@ -79,6 +83,10 @@ function generatedLoop(seed: string, opts: GeneratedLoopOptions): TrackPath {
 }
 
 // --- Hand-shaped signature circuits -----------------------------------
+// Each one is a simplified, recognizable silhouette of the real layout's defining
+// features — not traced GPS coordinates. Point counts/spacing vary track to track
+// on purpose (Red Bull Ring has very few points because it's a short, simple lap;
+// Singapore has many closely-spaced points to suggest a tight street-circuit zigzag).
 
 const monza: TrackPath = pathFromPoints([
   [120, 200],
@@ -173,28 +181,195 @@ const suzuka: TrackPath = pathFromPoints([
   [160, 230],
 ]);
 
-// --- Generated loops for the rest, varied by each track's character ---
+// Rounded loop with a wavy esses bulge (Maggotts/Becketts) on the upper-right and a
+// tight hairpin notch (Village/The Loop/Aintree) on the upper-left.
+const silverstone: TrackPath = pathFromPoints([
+  [180, 280],
+  [150, 240],
+  [170, 190],
+  [140, 160],
+  [180, 130],
+  [150, 100],
+  [230, 80],
+  [330, 75],
+  [420, 95],
+  [460, 130],
+  [420, 160],
+  [460, 200],
+  [420, 170],
+  [480, 140],
+  [530, 175],
+  [500, 215],
+  [580, 235],
+  [680, 260],
+  [650, 310],
+  [540, 330],
+  [380, 320],
+  [240, 310],
+]);
 
-const barcelona = generatedLoop("barcelona", { pointCount: 11, jitter: 0.4, aspect: 1.5 });
-const redbullring = generatedLoop("redbullring", { pointCount: 8, jitter: 0.25, aspect: 1.2 });
-const singapore = generatedLoop("singapore", { pointCount: 14, jitter: 0.5, aspect: 1.4 });
-const cota = generatedLoop("cota", { pointCount: 12, jitter: 0.45, aspect: 1.6 });
-const interlagos = generatedLoop("interlagos", { pointCount: 9, jitter: 0.35, aspect: 1.1 });
-const yasmarina = generatedLoop("yasmarina", { pointCount: 12, jitter: 0.4, aspect: 1.7 });
-const zandvoort = generatedLoop("zandvoort", { pointCount: 10, jitter: 0.3, aspect: 1.3 });
+// Elongated horizontal loop: a long back straight, a hairpin loop-back at the far end,
+// and a small infield wiggle mid-lap.
+const barcelona: TrackPath = pathFromPoints([
+  [140, 200],
+  [160, 150],
+  [230, 120],
+  [320, 110],
+  [400, 130],
+  [370, 170],
+  [430, 190],
+  [520, 170],
+  [600, 140],
+  [680, 160],
+  [700, 220],
+  [630, 260],
+  [540, 250],
+  [460, 270],
+  [380, 290],
+  [290, 300],
+  [210, 280],
+  [160, 250],
+]);
+
+// Short and simple on purpose — Spielberg only has a handful of corners — but with a
+// sharp outward point for the Turn 3 hairpin so it doesn't read as a plain oval.
+const redBullRing: TrackPath = pathFromPoints([
+  [280, 310],
+  [200, 260],
+  [180, 190],
+  [140, 130],
+  [220, 100],
+  [340, 90],
+  [480, 85],
+  [560, 100],
+  [620, 150],
+  [600, 210],
+  [560, 260],
+  [480, 300],
+  [380, 320],
+]);
+
+// Angular, tightly-spaced points for a boxy street-circuit zigzag feel.
+const singapore: TrackPath = pathFromPoints([
+  [180, 300],
+  [160, 250],
+  [200, 220],
+  [180, 180],
+  [230, 150],
+  [210, 110],
+  [280, 90],
+  [360, 110],
+  [340, 150],
+  [420, 160],
+  [480, 120],
+  [560, 110],
+  [610, 150],
+  [580, 200],
+  [620, 240],
+  [590, 290],
+  [500, 310],
+  [430, 280],
+  [350, 300],
+  [260, 320],
+]);
+
+// A big wavy esses complex (echoing Silverstone's Maggotts/Becketts, the real
+// inspiration for COTA's Turn 1-9) leading into a tightening stadium-hairpin section.
+const cota: TrackPath = pathFromPoints([
+  [160, 150],
+  [210, 110],
+  [270, 140],
+  [240, 180],
+  [300, 200],
+  [270, 240],
+  [330, 260],
+  [400, 230],
+  [480, 200],
+  [580, 190],
+  [670, 210],
+  [690, 270],
+  [630, 310],
+  [560, 290],
+  [520, 330],
+  [440, 310],
+  [400, 340],
+  [320, 320],
+  [250, 300],
+  [190, 260],
+  [150, 210],
+]);
+
+// Compact elongated oval with the famous "Senna S" kink right after the start/finish.
+const interlagos: TrackPath = pathFromPoints([
+  [220, 180],
+  [180, 150],
+  [210, 110],
+  [270, 100],
+  [240, 140],
+  [320, 160],
+  [420, 140],
+  [520, 150],
+  [620, 170],
+  [660, 230],
+  [600, 280],
+  [500, 300],
+  [400, 310],
+  [300, 290],
+  [240, 250],
+]);
+
+// Wide and asymmetric: one long straight on one side, a cluster of tight marina/hotel
+// corners on the other.
+const yasMarina: TrackPath = pathFromPoints([
+  [140, 200],
+  [220, 180],
+  [320, 175],
+  [420, 178],
+  [520, 182],
+  [620, 190],
+  [700, 210],
+  [680, 260],
+  [600, 250],
+  [580, 290],
+  [520, 280],
+  [500, 320],
+  [430, 300],
+  [400, 330],
+  [330, 310],
+  [280, 270],
+  [220, 280],
+  [170, 250],
+]);
+
+// Compact, with one very sharp near-180 hairpin right after the pit straight (Tarzan).
+const zandvoort: TrackPath = pathFromPoints([
+  [220, 300],
+  [260, 240],
+  [210, 200],
+  [260, 160],
+  [340, 140],
+  [440, 130],
+  [540, 150],
+  [610, 190],
+  [630, 250],
+  [580, 300],
+  [490, 320],
+  [380, 330],
+  [300, 320],
+]);
 
 export const trackPaths: Record<string, TrackPath> = {
   monza,
-  silverstone: generatedLoop("silverstone", { pointCount: 11, jitter: 0.35, aspect: 1.5 }),
+  silverstone,
   spa,
   suzuka,
   monaco,
   barcelona,
-  redbullring,
+  redbullring: redBullRing,
   singapore,
   cota,
   interlagos,
-  yasmarina,
+  yasmarina: yasMarina,
   zandvoort,
 };
 

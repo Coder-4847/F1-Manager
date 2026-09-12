@@ -695,12 +695,13 @@ h2 {
 
 .live-track__car {
   stroke: var(--bg);
-  stroke-width: 1.5;
+  stroke-width: 0.5;
+  stroke-linejoin: round;
 }
 
 .live-track__car--player {
   stroke: var(--yellow);
-  stroke-width: 2.5;
+  stroke-width: 0.8;
   filter: drop-shadow(0 0 5px var(--yellow));
 }
 
