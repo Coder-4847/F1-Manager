@@ -1,4 +1,4 @@
-import type { CarState, Driver, DrivingMode, PitStopPlan, TireCompound, Track, WeatherCondition } from "./types";
+import type { CarState, CautionType, Driver, DrivingMode, PitStopPlan, TireCompound, Track, WeatherCondition } from "./types";
 import { tireWearPercent } from "./tires";
 import { weatherMismatch } from "./weather";
 
@@ -32,6 +32,8 @@ export interface AIDecisionContext {
   aheadTireAge: number | null;
   /** Tire age (laps) of the car directly behind, from before this lap. Null if last. */
   behindTireAge: number | null;
+  /** The caution type controlling this lap (already in effect before it started), or null if racing green. */
+  caution: CautionType | null;
 }
 
 export interface AIAction {
@@ -121,8 +123,21 @@ export function decideAIAction(car: CarState, ctx: AIDecisionContext, random: ()
   const commitsToPit = !urgent || random() >= gambleChance;
 
   const lateRaceGuard = lapsRemaining <= 4 && wearPct < 92;
+
+  // A caution period makes pitting far cheaper than usual, so cars with any real tire wear
+  // grab the window instead of waiting for their normal threshold — not every car reacts the
+  // same lap (some just pitted, some gamble on staying out for track position), scaled a bit
+  // by aggression the same way the urgent-situation gamble is.
+  const cautionOpportunity =
+    ctx.caution !== null &&
+    car.tireAge >= 3 &&
+    wearPct >= 15 &&
+    random() < 0.45 + (car.driver.stats.aggression / 100) * 0.25;
+
   const shouldPit =
-    (urgent && commitsToPit) || (car.tireAge >= MIN_STINT_LAPS && !lateRaceGuard && wearPct >= threshold);
+    (urgent && commitsToPit) ||
+    (car.tireAge >= MIN_STINT_LAPS && !lateRaceGuard && wearPct >= threshold) ||
+    cautionOpportunity;
 
   let pitCompound: TireCompound | undefined;
   if (shouldPit) {

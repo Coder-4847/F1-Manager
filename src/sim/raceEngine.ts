@@ -1,4 +1,4 @@
-import type { CarState, Driver, DrivingMode, LapEvent, PitStopPlan, RaceState, TireCompound, Track } from "./types";
+import type { CarState, CautionPeriod, Driver, DrivingMode, LapEvent, PitStopPlan, RaceState, TireCompound, Track } from "./types";
 import type { AIDecisionContext, InitialStrategy } from "./strategy";
 import { calculateLapTime } from "./lapTime";
 import { pitStopTimeLoss } from "./pitStop";
@@ -8,6 +8,14 @@ import { applyDamage, clearDamage, rollForDamage } from "./damage";
 import { rollForWeatherChange, weatherLabel } from "./weather";
 import { rollForPenalty } from "./penalties";
 import { rollForRetirement } from "./retirement";
+import {
+  cautionLapTimeMultiplier,
+  cautionPitLossMultiplier,
+  rollCautionForDamage,
+  rollCautionForRetirement,
+  SC_GAP_CLOSURE_RATE,
+  SC_MIN_GAP_SECONDS,
+} from "./caution";
 import { drivers, getTeam } from "./roster";
 
 export interface RaceSetup {
@@ -75,6 +83,7 @@ export function setupRace(setup: RaceSetup): RaceState {
     finished: false,
     events: [],
     weather: "dry",
+    caution: null,
   };
 }
 
@@ -113,6 +122,12 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
   state.currentLap += 1;
   const lapEvents: LapEvent[] = [];
 
+  // The caution controlling *this* lap's driving — set before this lap began, so a caution
+  // triggered by something that happens during this same lap doesn't retroactively slow it
+  // down; its effects start next lap instead (see the trigger/decrement logic below).
+  const activeCaution = state.caution;
+  let cautionTriggeredThisLap: CautionPeriod | null = null;
+
   const weatherChange = rollForWeatherChange(state.weather, random);
   if (weatherChange) {
     state.weather = weatherChange;
@@ -130,7 +145,9 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
   for (const car of state.cars) {
     if (car.finished) continue;
 
-    const damageEvent = rollForDamage(car, state.weather, random);
+    // No new incidents while a caution is already out — the field is running slow and
+    // spread out behind it, which is exactly why a caution suppresses further chaos.
+    let damageEvent = activeCaution ? null : rollForDamage(car, state.weather, random);
     if (damageEvent) {
       applyDamage(car, damageEvent);
       lapEvents.push({
@@ -156,6 +173,7 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
         gapBehindSeconds: behind ? behind.totalTime - self.totalTime : null,
         aheadTireAge: ahead ? ahead.tireAge : null,
         behindTireAge: behind ? behind.tireAge : null,
+        caution: activeCaution?.type ?? null,
       };
 
       const decision = decideAIAction(car, ctx, random);
@@ -167,8 +185,9 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
 
     // Retirement is checked after driving mode is finalized for this lap (push mode is
     // one of its risk factors) but before anything else — a retiring car stops mid-lap,
-    // no lap time, no pit stop, nothing further to compute for it.
-    const retirement = rollForRetirement(car, state.weather, random);
+    // no lap time, no pit stop, nothing further to compute for it. Suppressed under an
+    // existing caution for the same reason as damage above.
+    const retirement = activeCaution ? null : rollForRetirement(car, state.weather, random);
     if (retirement) {
       car.finished = true;
       car.retired = true;
@@ -179,10 +198,20 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
         driverId: car.driver.id,
         message: `${car.driver.name} retires from the race — ${retirement.reason.toLowerCase()}!`,
       });
+      if (!cautionTriggeredThisLap) {
+        cautionTriggeredThisLap = rollCautionForRetirement(random);
+      }
       continue;
     }
 
-    const penaltyEvent = rollForPenalty(car, random);
+    // A retirement always brings out at least a VSC, but a car that survives with serious
+    // damage can also bring one out on its own (limping back, marshals clearing debris) —
+    // strictly weaker than the retirement trigger above, so it never escalates to a full SC.
+    if (!activeCaution && !cautionTriggeredThisLap && damageEvent) {
+      cautionTriggeredThisLap = rollCautionForDamage(damageEvent.severity, random);
+    }
+
+    const penaltyEvent = activeCaution ? null : rollForPenalty(car, random);
     if (penaltyEvent) {
       car.penaltySeconds += penaltyEvent.seconds;
       lapEvents.push({
@@ -196,10 +225,12 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
     const duePitStop: PitStopPlan | undefined =
       car.pitPlan[0]?.lap === state.currentLap ? car.pitPlan.shift() : undefined;
 
-    const rawLapTime = calculateLapTime(car, state.track, state.weather, random);
+    const lapTimeMultiplier = activeCaution ? cautionLapTimeMultiplier(activeCaution.type) : 1;
+    const rawLapTime = calculateLapTime(car, state.track, state.weather, random) * lapTimeMultiplier;
     const repaired = Boolean(duePitStop && car.pendingRepairSeconds !== undefined);
+    const pitLossMultiplier = activeCaution ? cautionPitLossMultiplier(activeCaution.type) : 1;
     const pitLoss = duePitStop
-      ? pitStopTimeLoss(state.track, random) + (repaired ? car.pendingRepairSeconds! : 0)
+      ? pitStopTimeLoss(state.track, random) * pitLossMultiplier + (repaired ? car.pendingRepairSeconds! : 0)
       : undefined;
 
     computed.set(car.driver.id, {
@@ -209,6 +240,19 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
       pitLoss,
       repaired,
       penaltySeconds: penaltyEvent?.seconds ?? 0,
+    });
+  }
+
+  if (cautionTriggeredThisLap) {
+    state.caution = cautionTriggeredThisLap;
+    lapEvents.push({
+      type: "caution",
+      lap: state.currentLap,
+      driverId: "",
+      message:
+        cautionTriggeredThisLap.type === "sc"
+          ? "Safety Car deployed! The field bunches up behind it."
+          : "Virtual Safety Car deployed — hold your gap and cut your pace.",
     });
   }
 
@@ -231,26 +275,36 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
     const aheadFinal = aheadId ? resolvedTotal.get(aheadId) : undefined;
 
     if (!duePitStop && aheadEntry && !aheadEntry.duePitStop && aheadFinal !== undefined) {
-      const gap = naiveTotal - aheadFinal;
-      if (Math.abs(gap) < BATTLE_ZONE_SECONDS) {
-        const passed = resolveOvertakeAttempt(
-          car,
-          rawLapTime,
-          aheadEntry.car,
-          aheadEntry.rawLapTime,
-          state.track,
-          random
-        );
-        if (passed) {
-          finalTotal = Math.min(naiveTotal, aheadFinal - PASS_MARGIN_SECONDS);
-          lapEvents.push({
-            type: "overtake",
-            lap: state.currentLap,
-            driverId,
-            message: `${car.driver.name} passes ${aheadEntry.car.driver.name} for position!`,
-          });
-        } else {
-          finalTotal = Math.max(naiveTotal, aheadFinal + HELD_UP_GAP_SECONDS);
+      if (activeCaution) {
+        // No overtaking under any caution — the field holds station. A full Safety Car
+        // additionally bunches the queue up nose-to-tail over the caution's laps by
+        // closing a chunk of each gap every lap, rather than snapping it shut instantly.
+        if (activeCaution.type === "sc") {
+          const gap = naiveTotal - aheadFinal;
+          finalTotal = aheadFinal + Math.max(gap * (1 - SC_GAP_CLOSURE_RATE), SC_MIN_GAP_SECONDS);
+        }
+      } else {
+        const gap = naiveTotal - aheadFinal;
+        if (Math.abs(gap) < BATTLE_ZONE_SECONDS) {
+          const passed = resolveOvertakeAttempt(
+            car,
+            rawLapTime,
+            aheadEntry.car,
+            aheadEntry.rawLapTime,
+            state.track,
+            random
+          );
+          if (passed) {
+            finalTotal = Math.min(naiveTotal, aheadFinal - PASS_MARGIN_SECONDS);
+            lapEvents.push({
+              type: "overtake",
+              lap: state.currentLap,
+              driverId,
+              message: `${car.driver.name} passes ${aheadEntry.car.driver.name} for position!`,
+            });
+          } else {
+            finalTotal = Math.max(naiveTotal, aheadFinal + HELD_UP_GAP_SECONDS);
+          }
         }
       }
     }
@@ -281,6 +335,22 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
       car.finished = true;
     }
   });
+
+  // Only count this lap against a caution that was already running before it started — a
+  // caution triggered *this* lap (see cautionTriggeredThisLap above) starts its countdown
+  // next lap instead, since this lap already played out at (mostly) racing speed.
+  if (activeCaution && state.caution === activeCaution) {
+    state.caution.lapsRemaining -= 1;
+    if (state.caution.lapsRemaining <= 0) {
+      state.caution = null;
+      lapEvents.push({
+        type: "caution",
+        lap: state.currentLap,
+        driverId: "",
+        message: "Green flag! Racing resumes at full pace.",
+      });
+    }
+  }
 
   state.events.push(...lapEvents);
 

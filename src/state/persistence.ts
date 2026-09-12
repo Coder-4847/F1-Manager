@@ -1,9 +1,9 @@
 import type { RaceState } from "../sim/types";
 import type { SeasonState } from "../sim/season";
 
-// Bumped to v5: CarState gained penaltySeconds (required, so an old save's missing field
-// would propagate NaN through totals) plus retired/retiredReason/damageDescription.
-const SAVE_KEY = "f1-manager-save-v5";
+// Bumped to v6: RaceState gained caution (required — an old save's missing field would be
+// `undefined`, which fails `!== null` checks and crashes on property access).
+const SAVE_KEY = "f1-manager-save-v6";
 
 export interface SeasonSave {
   season: SeasonState;

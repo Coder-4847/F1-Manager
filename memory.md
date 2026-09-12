@@ -57,7 +57,7 @@ Opens at `http://localhost:5173`. `npm run build` produces the static
 
 ## Architecture
 
-Current as of phase 16 (2026-09-12) — kept in sync with `src/` on every phase;
+Current as of phase 17 (2026-09-12) — kept in sync with `src/` on every phase;
 if this ever drifts, `find src -type f | sort` is the source of truth.
 
 ```
@@ -97,6 +97,12 @@ src/
     retirement.ts     rollForRetirement — extremely rare per-lap DNF chance
                       built from three additive risk factors (active damage,
                       tire/weather mismatch, push mode). Phase 15.
+    caution.ts        Safety Car / VSC: rollCautionForRetirement (always
+                      triggers at least a VSC, ~40% escalates to a full SC),
+                      rollCautionForDamage (a small independent chance major/
+                      mechanical damage alone brings out a VSC, never SC),
+                      plus the lap-time/pit-loss multipliers and the SC
+                      gap-closure rate used by raceEngine. Phase 17.
     lapTime.ts        Per-lap time = base pace + tire wear + fuel burn-off +
                       driving-mode delta + weather penalty + randomness
                       (scaled by consistency and conditions) + active damage.
@@ -104,19 +110,37 @@ src/
     strategy.ts       AI: generateAIStrategy (starting compound/mode only,
                       decided pre-race) + decideAIAction (reactive per-lap
                       pit/mode decisions based on tire wear, gaps to cars
-                      ahead/behind, damage, weather mismatch, and driver
-                      personality stats) — includes a gambleChance so cars
-                      don't all react to urgent situations in lockstep.
+                      ahead/behind, damage, weather mismatch, driver
+                      personality stats, and now an active caution — a
+                      `cautionOpportunity` roll grabs the cheap pit window
+                      even without normal urgency, phase 17) — includes a
+                      gambleChance so cars don't all react to urgent
+                      situations in lockstep.
     overtaking.ts     resolveOvertakeAttempt — probabilistic pass resolution
                       weighing pace delta, tire wear difference, aggression
-                      vs. consistency, and track overtaking difficulty.
+                      vs. consistency, and track overtaking difficulty. Not
+                      called at all while a caution is active (see
+                      raceEngine.ts below) — no overtaking under yellow.
     raceEngine.ts     setupRace (incl. runQualifying() grid order, phase 16)
                       + simulateLap: weather roll, per-car damage/retirement/
-                      penalty rolls, reactive AI calls, lap time, pit stops,
-                      battle resolution (cars within 0.8s of the car ahead
-                      fight for the position instead of passing for free).
-                      getStandings (DNFs ranked below classified cars) and
-                      getFinalResults (+ best lap) live here too.
+                      penalty rolls (all three skipped while a caution is
+                      already active — no new incidents under yellow, phase
+                      17), reactive AI calls, lap time, pit stops, battle
+                      resolution (cars within 0.8s of the car ahead fight for
+                      the position instead of passing for free, unless a
+                      caution suppresses it). `activeCaution` is captured at
+                      the top of simulateLap (the caution controlling *this*
+                      lap, from before it started) so a caution triggered
+                      *during* the lap doesn't retroactively slow it down —
+                      its effects (lap-time multiplier, pit-loss discount,
+                      and for a full SC, closing each gap toward the leader
+                      by SC_GAP_CLOSURE_RATE per lap) start the lap after.
+                      `state.caution` only decrements when it equals the
+                      snapshotted `activeCaution` reference, which is what
+                      keeps a freshly-triggered caution from being
+                      decremented the same lap it's set. getStandings (DNFs
+                      ranked below classified cars) and getFinalResults
+                      (+ best lap) live here too.
     season.ts         Season calendar (SeasonRound[] — trackId + custom laps,
                       phase 12), per-round results, cumulative driver/
                       constructor points (classic 25-18-15-...-1, 0 for DNFs).
@@ -124,13 +148,19 @@ src/
   state/          React-facing hooks wrapping the sim.
     useRace.ts        Owns one race's live state: play/pause/step/speed,
                       player driving-mode/pit-stop controls, track switching,
-                      planPending/damageAlert/weatherAlert gating. Playback
-                      speed is real seconds-per-lap (1x ≈ 5s/lap; 0.5x/2x/4x
-                      scale from that). Every setRaceState updater
-                      structuredClone()s `prev` before mutating — see the
-                      StrictMode bugs in phase 15's entry below; don't remove
-                      this. Alert detection lives in a useEffect reacting to
-                      committed state, not inside the updater — same reason.
+                      planPending/damageAlert/weatherAlert/cautionAlert
+                      gating. Playback speed is real seconds-per-lap (1x ≈
+                      5s/lap; 0.5x/2x/4x scale from that). Every setRaceState
+                      updater structuredClone()s `prev` before mutating — see
+                      the StrictMode bugs in phase 15's entry below; don't
+                      remove this. Alert detection lives in a useEffect
+                      reacting to committed state, not inside the updater —
+                      same reason. `cautionAlert` detects a *freshly*
+                      deployed caution via `raceState.caution.lapsRemaining
+                      === raceState.caution.durationLaps` (only true the one
+                      lap it's triggered, since raceEngine never decrements a
+                      caution the same lap it sets it) rather than parsing
+                      event messages, phase 17.
     useSeason.ts      Wraps useRace: advances to the next round's track when
                       a race finishes, tracks season points, restart/season-
                       complete/custom-season, save/load. NOTE: computes the
@@ -141,12 +171,12 @@ src/
                       save (key `f1-manager-driver-profile-v1`). Phase 11.
     persistence.ts    localStorage save/load of the whole season
                       ({season, raceState} as one JSON blob). Key is
-                      currently `f1-manager-save-v5` — bumped each time
+                      currently `f1-manager-save-v6` — bumped each time
                       CarState/RaceState gains a field an old save wouldn't
                       have (v3: custom-season calendar shape; v4: weather +
                       damage fields; v5: penaltySeconds/retired/
-                      damageDescription). Bump again next time the schema
-                      changes.
+                      damageDescription; v6: RaceState.caution). Bump again
+                      next time the schema changes.
 
   ui/             Presentational components, one concern each.
     MainMenu.tsx        Full-screen title menu (Play/Resume, Custom Season,
@@ -169,6 +199,13 @@ src/
                       health icon, damage name + narrative description,
                       per-lap cost, pit-for-repairs/push-through. Phase 13,
                       description in 15, visual icon in 16.
+    CautionAlert.tsx    Blocking popup the lap a Safety Car/VSC is freshly
+                      deployed — type, expected duration, and an estimated
+                      discounted pit cost (track.pitLaneLossSeconds ×
+                      cautionPitLossMultiplier), pit-now/stay-out. Lowest
+                      priority of the four pre-race/mid-race modals (after
+                      plan/weather/damage) since it's the least urgent to the
+                      player's own car. Phase 17.
     CarHealthIndicator.tsx  Small schematic top-down car SVG that recolors
                       green/orange/red with damage severity. Phase 16.
     RaceResults.tsx     Auto-opens when a race finishes — final
@@ -191,12 +228,12 @@ src/
                       boundaries.
     PlaybackControls.tsx  Play/Pause/Step/Reset/Speed/Save/Load/Next-Round;
                       `blocked` prop disables Play/Step while any modal gate
-                      (plan/damage/weather) is active.
+                      (plan/damage/weather/caution) is active.
     PlayerControls.tsx    Car condition indicator, tires, damage/penalty
                       status, driving-mode + pit-stop queue, "Revise Plan"
                       button.
-    EventFeed.tsx          Pit-stop, overtake, damage, weather, penalty, and
-                      retirement event log (one icon each).
+    EventFeed.tsx          Pit-stop, overtake, damage, weather, penalty,
+                      retirement, and caution event log (one icon each).
     SeasonStandings.tsx    Drivers' + Constructors' championship tables,
                       podium-tinted top 3.
     TireBadge.tsx          Compound chip + wear bar for all 5 compounds
@@ -620,6 +657,102 @@ src/
       confirmed Race Results, then separately re-verified Edit
       Driver/Custom Season both still open correctly over the menu and
       return to it on cancel.
+17. **Safety Car / VSC** — the first of two features the user asked for
+    together (Safety Car/VSC and team development/budget), scoped via a round
+    of questions first: escalating VSC→SC by severity (not VSC-only or
+    SC-only), an interactive blocking alert on deployment (matching the
+    Weather/Damage alert pattern), and no persistence concerns since this
+    feature is entirely within a single race.
+    - **Trigger model** (new `sim/caution.ts`): a retirement always brings
+      out at least a Virtual Safety Car, with a 40% chance it escalates to a
+      full Safety Car instead (`rollCautionForRetirement`). Independently,
+      major/mechanical damage that *doesn't* cause a retirement has its own
+      small 12% chance to bring out a VSC on its own — a car limping back
+      with visible damage — but this path never escalates to a full SC
+      (`rollCautionForDamage`). VSC lasts 3-5 laps, SC lasts 4-7. Verified
+      the trigger split and duration ranges by Monte Carlo (5000 trials via
+      dynamic `import('/src/sim/caution.ts')` in a dev-server browser tab,
+      same technique as phase 15's retirement verification): landed at
+      40.2%/59.8% SC/VSC and 12.15% for the damage path, matching spec.
+    - **Effects** (`raceEngine.ts`'s `simulateLap`): a caution multiplies
+      every car's raw lap time (VSC ×1.35, SC ×1.6 — a multiplier rather
+      than a flat seconds figure, so it scales correctly across wildly
+      different track lengths) and discounts pit-stop time loss (VSC ×0.65,
+      SC ×0.35 — the "cheap window" the whole feature exists to create).
+      Both types suppress overtaking entirely and pause new
+      damage/retirement/penalty rolls for the duration (a caution existing
+      is exactly why the field *isn't* generating new chaos). A full SC
+      additionally bunches the field: each lap, a car's gap to the one ahead
+      closes by 45% (`SC_GAP_CLOSURE_RATE`, floored at 0.05s so gaps never
+      hit exactly zero) instead of the normal battle/overtake resolution —
+      converges the pack to nose-to-tail over the SC's several laps rather
+      than snapping shut instantly.
+    - **Timing subtlety, worth remembering**: `simulateLap` snapshots
+      `activeCaution = state.caution` *before* processing the lap — this is
+      the caution that controls this lap's math. A caution triggered by an
+      incident *during* this same lap (via `cautionTriggeredThisLap`) is
+      written to `state.caution` but does **not** affect this lap's lap-time
+      multiplier, pit discount, or bunching — those start next lap. This
+      matters because the incident that triggers a caution still happens at
+      racing speed; only the *response* to it is slow. Symmetrically, the
+      lapsRemaining-decrement logic at the end of the lap only fires
+      `if (state.caution === activeCaution)` — i.e. only for a caution that
+      already existed before the lap — so a freshly-triggered caution's
+      countdown starts the lap after, not the lap it's set. Get this wrong
+      (e.g. decrement unconditionally) and a caution silently loses its
+      first lap of duration, or a same-lap incident retroactively slows down
+      a lap that already played out at racing pace.
+    - **AI reaction** (`strategy.ts`): `decideAIAction` gained a `caution`
+      field on its context. A `cautionOpportunity` roll (45-70%, aggression-
+      scaled, gated on the car having at least a little tire wear so a car
+      that just pitted doesn't immediately pit again) lets AI cars grab the
+      cheap window even without their normal pit-urgency threshold being
+      met — this is what makes the field's pit-stop pattern visibly cluster
+      during a caution instead of continuing on the same schedule as if
+      nothing happened.
+    - **Player experience**: a new `ui/CautionAlert.tsx` blocking modal
+      (lowest priority of the four modals, after plan/weather/damage) fires
+      the lap a caution is freshly deployed — type, expected duration, and
+      an estimated discounted pit cost — with Pit Now (queues a stop next
+      lap on the current compound, like `resolveDamage`) or Stay Out. A
+      persistent yellow banner in the header (`caution-banner` in
+      `App.css`) shows type + laps remaining for the whole caution period,
+      and `EventFeed.tsx` logs both the deployment and the "Green flag!"
+      end. `useRace.ts` detects a *freshly* deployed caution via
+      `raceState.caution.lapsRemaining === raceState.caution.durationLaps`
+      (only true the one lap it's set, per the timing subtlety above) rather
+      than parsing event message text — a cleaner, state-shape-based
+      detection than the string-matching this could easily have become.
+    - Bumped the season-save key to `f1-manager-save-v6` (`RaceState`
+      gained the required `caution` field — an old save's `undefined` would
+      fail `!== null` checks and crash on property access, so this needed a
+      version bump rather than degrading gracefully).
+    - Verified in-browser with the same custom 100-lap single-track (Monza)
+      approach as prior phases, player in push mode to raise the incident
+      rate: 4 VSCs deployed over the race (one from a retirement, the rest
+      from the damage-only path — no live full SC this run, consistent with
+      SC needing both a retirement *and* the 40% escalation roll), each
+      showing the correct alert copy and discounted pit estimate, the
+      banner counting down correctly, racing resuming normally (overtakes
+      reappearing in the event feed) after each "Green flag!", and the race
+      completing cleanly at lap 100 with a caution still active at the
+      finish (an edge case that worked without special-casing, since a
+      caution's effects are just per-lap multipliers with no assumption the
+      race continues past it) — zero console errors throughout. Because a
+      live full SC needs a retirement (rare by design, see phase 15) *and*
+      a 40% escalation roll on top, its rarer bunching/discount path was
+      instead verified deterministically: imported `raceEngine.ts` directly
+      in the browser console, forced `state.caution = {type: "sc", ...}`
+      with two real roster cars artificially 5s apart, ran one
+      `simulateLap` with a constant-random source, and confirmed the gap
+      closed (5s → 3.14s, in the expected direction/magnitude — not exactly
+      45% because the two real drivers have slightly different pace stats,
+      which is expected noise, not a bug), no overtake event fired despite
+      the cars being well within the normal battle zone, and
+      `lapsRemaining` decremented correctly. A second console test
+      confirmed a VSC pit stop costs exactly 0.65× a green-flag one
+      (25.4s → 16.5s for the same stop) and that the caution clears with a
+      "Green flag!" event exactly on its last lap.
 
 ## A real bug that was found and fixed (worth knowing about)
 
@@ -644,10 +777,11 @@ through the exact crash point with zero errors afterward.
   localStorage slot per browser.
 - Battle/overtake resolution is a heuristic model, not physics — tuned to
   "feel fair," not validated against real telemetry.
-- No safety car/VSC periods and no car development/budget progression
-  across a season — both flagged in phase 16 as natural next steps if the
-  user wants more depth, deliberately not built without discussing scope
-  (development/budget especially is a genuinely large addition).
+- No car development/budget progression across a season — flagged in phase
+  16 as a natural next step (phase 17 built the other one, Safety Car/VSC),
+  deliberately not built without discussing scope first since it's a
+  genuinely large addition (a budget currency, upgrade choices, and per the
+  scoping conversation before phase 17, AI teams developing too).
 
 ## Working style notes for whoever picks this up
 

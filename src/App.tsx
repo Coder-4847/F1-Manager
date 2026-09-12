@@ -16,6 +16,7 @@ import { DriverProfile } from "./ui/DriverProfile";
 import { SeasonSetup } from "./ui/SeasonSetup";
 import { DamageAlert } from "./ui/DamageAlert";
 import { WeatherAlert } from "./ui/WeatherAlert";
+import { CautionAlert } from "./ui/CautionAlert";
 import { RacingPlan } from "./ui/RacingPlan";
 import { RevisePlan } from "./ui/RevisePlan";
 import { RaceResults } from "./ui/RaceResults";
@@ -65,6 +66,7 @@ function App() {
     tickDurationMs,
     damageAlert,
     weatherAlert,
+    cautionAlert,
     planPending,
     setSpeed,
     play,
@@ -77,10 +79,11 @@ function App() {
     updatePitPlan,
     resolveDamage,
     resolveWeather,
+    resolveCaution,
     confirmPlan,
   } = race;
 
-  const blocked = damageAlert || weatherAlert || planPending;
+  const blocked = damageAlert || weatherAlert || cautionAlert || planPending;
 
   const [showMenu, setShowMenu] = useState(true);
   const [showProfileEditor, setShowProfileEditor] = useState(false);
@@ -201,6 +204,13 @@ function App() {
         </p>
       </header>
 
+      {raceState.caution && (
+        <div className={`caution-banner caution-banner--${raceState.caution.type}`}>
+          🚧 {raceState.caution.type === "sc" ? "SAFETY CAR" : "VIRTUAL SAFETY CAR"} &middot;{" "}
+          {raceState.caution.lapsRemaining} lap{raceState.caution.lapsRemaining === 1 ? "" : "s"} remaining
+        </div>
+      )}
+
       {planPending && playerCar && (
         <RacingPlan
           trackName={track.name}
@@ -234,6 +244,15 @@ function App() {
           car={playerCar}
           onPit={() => resolveDamage("pit")}
           onPush={() => resolveDamage("push")}
+        />
+      )}
+
+      {!planPending && !weatherAlert && !damageAlert && cautionAlert && raceState.caution && (
+        <CautionAlert
+          caution={raceState.caution}
+          track={track}
+          onPit={() => resolveCaution("pit")}
+          onPush={() => resolveCaution("push")}
         />
       )}
 

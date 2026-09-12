@@ -76,6 +76,19 @@ export interface PitStopPlan {
 
 export type DamageSeverity = "minor" | "major" | "mechanical";
 
+/** vsc = Virtual Safety Car (flat delta, field holds position); sc = full Safety Car
+ *  (field physically bunches up behind it, much cheaper pit stops). */
+export type CautionType = "vsc" | "sc";
+
+export interface CautionPeriod {
+  type: CautionType;
+  /** Total laps this caution period lasts, fixed the lap it's triggered. */
+  durationLaps: number;
+  /** Laps left. Counts down starting the lap *after* it's triggered — the lap an incident
+   *  happens still plays out at racing speed up to that point. */
+  lapsRemaining: number;
+}
+
 export interface CarState {
   driver: Driver;
   team: Team;
@@ -114,9 +127,9 @@ export interface CarState {
 }
 
 export interface LapEvent {
-  type: "pit-stop" | "overtake" | "damage" | "weather" | "penalty" | "retirement";
+  type: "pit-stop" | "overtake" | "damage" | "weather" | "penalty" | "retirement" | "caution";
   lap: number;
-  /** Empty for race-wide events (currently just "weather") that aren't tied to one car. */
+  /** Empty for race-wide events (weather, caution) that aren't tied to one car. */
   driverId: string;
   message: string;
 }
@@ -128,4 +141,6 @@ export interface RaceState {
   finished: boolean;
   events: LapEvent[];
   weather: WeatherCondition;
+  /** Active Safety Car / VSC period, or null when racing is green. */
+  caution: CautionPeriod | null;
 }

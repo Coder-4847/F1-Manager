@@ -52,6 +52,9 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
   // True before every race until the player confirms a Racing Plan — playback
   // is blocked the same way, so the plan is always locked in before lights-out.
   const [planPending, setPlanPending] = useState(true);
+  // True right after a Safety Car/VSC is freshly deployed — offers the discounted pit
+  // window immediately, same pause/gate pattern as the other alerts.
+  const [cautionAlert, setCautionAlert] = useState(false);
 
   // The highest lap number already checked for alert-worthy events. Deciding whether to
   // pop an alert lives in a useEffect (below), reacting to the *committed* raceState,
@@ -95,21 +98,27 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
       weatherChangedThisLap &&
       playerCar !== undefined &&
       weatherMismatch(playerCar.currentCompound, raceState.weather) >= 1;
+    // A caution just freshly deployed this lap has lapsRemaining still equal to its full
+    // durationLaps — the decrement in simulateLap only ever applies to a caution that was
+    // already active *before* the lap it's checking, so this is a reliable one-lap window.
+    const cautionJustDeployed =
+      raceState.caution !== null && raceState.caution.lapsRemaining === raceState.caution.durationLaps;
 
-    if (seriousDamage || weatherNowMismatched) {
+    if (seriousDamage || weatherNowMismatched || cautionJustDeployed) {
       setPlaying(false);
       if (weatherNowMismatched) setWeatherAlert(true);
       if (seriousDamage) setDamageAlert(true);
+      if (cautionJustDeployed) setCautionAlert(true);
     }
   }, [raceState, playerDriverId]);
 
   useEffect(() => {
-    if (!playing || damageAlert || weatherAlert || planPending) return;
+    if (!playing || damageAlert || weatherAlert || cautionAlert || planPending) return;
     intervalRef.current = window.setInterval(step, TICK_MS_BY_SPEED[speed]);
     return () => {
       if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
     };
-  }, [playing, speed, step, damageAlert, weatherAlert, planPending]);
+  }, [playing, speed, step, damageAlert, weatherAlert, cautionAlert, planPending]);
 
   useEffect(() => {
     if (raceState.finished) setPlaying(false);
@@ -122,6 +131,7 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
     setPlaying(false);
     setDamageAlert(false);
     setWeatherAlert(false);
+    setCautionAlert(false);
     setPlanPending(true);
     lastCheckedLapRef.current = 0;
     setRaceState((prev) => setupRace({ track: prev.track, playerDriverId, playerStrategy }));
@@ -132,6 +142,7 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
       setPlaying(false);
       setDamageAlert(false);
       setWeatherAlert(false);
+      setCautionAlert(false);
       setPlanPending(true);
       lastCheckedLapRef.current = 0;
       setRaceState(setupRace({ track, playerDriverId, playerStrategy }));
@@ -145,6 +156,7 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
     setPlaying(false);
     setDamageAlert(false);
     setWeatherAlert(false);
+    setCautionAlert(false);
     setPlanPending(false);
     // The loaded race may already be mid-race — mark everything up to its current lap as
     // already checked so we don't immediately re-alert on old, already-resolved events.
@@ -210,6 +222,20 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
     setWeatherAlert(false);
   }, []);
 
+  /** Resolves a pending caution alert: grab the cheap pit window next lap on the current
+   *  compound, or stay out and keep track position. */
+  const resolveCaution = useCallback((choice: "pit" | "push") => {
+    if (choice === "pit") {
+      setRaceState((prev) => {
+        const next = structuredClone(prev);
+        const car = next.cars.find((c) => c.isPlayer);
+        if (car) queuePlayerPitStop(next, next.currentLap + 1, car.currentCompound);
+        return next;
+      });
+    }
+    setCautionAlert(false);
+  }, []);
+
   /** Locks in the player's pre-race plan (starting tires, mode, pit schedule) and unblocks playback. */
   const confirmPlan = useCallback((plan: InitialStrategy) => {
     setRaceState((prev) => {
@@ -232,6 +258,7 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
     tickDurationMs: TICK_MS_BY_SPEED[speed],
     damageAlert,
     weatherAlert,
+    cautionAlert,
     planPending,
     setSpeed,
     play,
@@ -246,6 +273,7 @@ export function useRace({ initialTrack, playerDriverId, playerStrategy }: UseRac
     updatePitPlan,
     resolveDamage,
     resolveWeather,
+    resolveCaution,
     confirmPlan,
   };
 }
