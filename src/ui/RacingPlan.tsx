@@ -1,8 +1,9 @@
 import { useState } from "react";
-import type { DrivingMode, FuelLoad, PitStopPlan, TireCompound, WeatherCondition } from "../sim/types";
+import type { DownforceSetting, DrivingMode, FuelLoad, PitStopPlan, TireCompound, WeatherCondition } from "../sim/types";
 import type { InitialStrategy } from "../sim/strategy";
 import { generateWeatherForecast } from "../sim/weather";
 import { FUEL_LOADS, FUEL_LOAD_LABEL } from "../sim/fuel";
+import { DOWNFORCE_SETTINGS, DOWNFORCE_LABEL } from "../sim/downforce";
 import { WeatherForecast } from "./WeatherForecast";
 
 const COMPOUNDS: TireCompound[] = ["soft", "medium", "hard", "intermediate", "wet"];
@@ -29,6 +30,11 @@ export interface RacingPlanProps {
   /** Hides the fuel load picker entirely when the Settings toggle is off — the plan is then
    *  submitted with initialPlan.fuelLoad unchanged (already forced to "standard"). */
   fuelStrategyEnabled: boolean;
+  /** Same idea as fuelStrategyEnabled, for the downforce picker. */
+  setupTradeoffEnabled: boolean;
+  /** Which way this track's character leans — shown as a plain-language hint next to the
+   *  downforce picker, computed by the caller from the actual Track (recommendedDownforceFor). */
+  downforceHint: DownforceSetting;
 }
 
 export function RacingPlan({
@@ -41,10 +47,13 @@ export function RacingPlan({
   hasSave,
   onLoad,
   fuelStrategyEnabled,
+  setupTradeoffEnabled,
+  downforceHint,
 }: RacingPlanProps) {
   const [compound, setCompound] = useState<TireCompound>(initialPlan.startingCompound);
   const [mode, setMode] = useState<DrivingMode>(initialPlan.drivingMode);
   const [fuelLoad, setFuelLoad] = useState<FuelLoad>(initialPlan.fuelLoad);
+  const [downforce, setDownforce] = useState<DownforceSetting>(initialPlan.downforce);
   // Generated once when the screen opens — a preview, not a guarantee (see generateWeatherForecast).
   const [forecast] = useState(() => generateWeatherForecast(startWeather, totalLaps));
   // Clamp the incoming default (e.g. the app's placeholder plan) to this specific race's
@@ -77,6 +86,7 @@ export function RacingPlan({
       drivingMode: mode,
       pitPlan: [...pitPlan].sort((a, b) => a.lap - b.lap),
       fuelLoad: fuelStrategyEnabled ? fuelLoad : "standard",
+      downforce: setupTradeoffEnabled ? downforce : "balanced",
     });
   };
 
@@ -149,12 +159,39 @@ export function RacingPlan({
               </div>
             </div>
           )}
+
+          {setupTradeoffEnabled && (
+            <div className="driver-profile__field">
+              <label>Downforce</label>
+              <div className="segmented">
+                {DOWNFORCE_SETTINGS.map((setting) => (
+                  <button
+                    key={setting}
+                    type="button"
+                    className={setting === downforce ? "segmented__btn segmented__btn--active" : "segmented__btn"}
+                    onClick={() => setDownforce(setting)}
+                  >
+                    {DOWNFORCE_LABEL[setting]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {fuelStrategyEnabled && (
           <p className="racing-plan__fuel-hint">
             Light is quicker but can run dry late in the race if you push too much — Heavy is always safe but
             permanently slower.
+          </p>
+        )}
+
+        {setupTradeoffEnabled && (
+          <p className="racing-plan__fuel-hint">
+            {downforceHint === "balanced"
+              ? "This track doesn't strongly favor either extreme — Balanced is a safe default."
+              : `This track tends to reward ${DOWNFORCE_LABEL[downforceHint].toLowerCase()} downforce. Going against the
+                 grain trades lap time for tire life, or vice versa.`}
           </p>
         )}
 

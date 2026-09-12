@@ -13,7 +13,7 @@ export type DrivingMode = "push" | "balanced" | "conserve";
 export type FuelLoad = "light" | "standard" | "heavy";
 
 /** Pre-race downforce setup choice — a pace/tire-wear trade-off suited to the track's
- *  character (power tracks favor low, twisty tracks favor high). See setup.ts. */
+ *  character (power tracks favor low, twisty tracks favor high). See downforce.ts. */
 export type DownforceSetting = "low" | "balanced" | "high";
 
 /** dry = normal grip; damp = light rain/drying track, suits intermediates; wet = heavy rain, suits full wets. */
@@ -150,6 +150,9 @@ export interface CarState {
   /** true once fuelRemaining has run out — applies a lap-time penalty for the rest of the
    *  race (see FUEL_SAVING_PENALTY_SECONDS). Never un-sets once triggered. */
   fuelSaving: boolean;
+  /** Chosen pre-race (or forced to "balanced" when the Setup Trade-off setting is off) —
+   *  fixed for the whole race, see downforce.ts. */
+  downforce: DownforceSetting;
 }
 
 export interface LapEvent {

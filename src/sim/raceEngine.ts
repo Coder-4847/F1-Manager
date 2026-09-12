@@ -1,4 +1,4 @@
-import type { CarState, CautionPeriod, Driver, DrivingMode, FuelLoad, LapEvent, PitStopPlan, RaceState, TireCompound, Track } from "./types";
+import type { CarState, CautionPeriod, DownforceSetting, Driver, DrivingMode, FuelLoad, LapEvent, PitStopPlan, RaceState, TireCompound, Track } from "./types";
 import type { AIDecisionContext, InitialStrategy } from "./strategy";
 import { calculateLapTime } from "./lapTime";
 import { pitStopTimeLoss } from "./pitStop";
@@ -63,6 +63,7 @@ function createCarState(
   // whatever the strategy object happens to carry — guards against a stale "light"/"heavy"
   // choice left over from before the player disabled the feature.
   const fuelLoad: FuelLoad = settings.fuelStrategyEnabled ? strategy.fuelLoad : "standard";
+  const downforce: DownforceSetting = settings.setupTradeoffEnabled ? strategy.downforce : "balanced";
   return {
     driver,
     team: developedTeam(driver.teamId, development),
@@ -83,6 +84,7 @@ function createCarState(
     fuelLoad,
     fuelRemaining: initialFuelRemaining(fuelLoad, totalLaps),
     fuelSaving: false,
+    downforce,
   };
 }
 
@@ -445,6 +447,7 @@ export function applyPlayerPlan(state: RaceState, plan: InitialStrategy): void {
   car.fuelLoad = plan.fuelLoad;
   car.fuelRemaining = initialFuelRemaining(plan.fuelLoad, state.track.totalLaps);
   car.fuelSaving = false;
+  car.downforce = plan.downforce;
 }
 
 /** Changes the player car's driving mode with immediate effect from the next simulated lap. */

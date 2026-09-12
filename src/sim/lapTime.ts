@@ -2,6 +2,7 @@ import type { CarState, DrivingMode, Track, WeatherCondition } from "./types";
 import { tireCompounds, tireWearPenalty } from "./tires";
 import { tireWeatherPenaltySeconds, weatherBaseLapPenaltySeconds, weatherLevel } from "./weather";
 import { FUEL_LOAD_PACE_DELTA, FUEL_SAVING_PENALTY_SECONDS } from "./fuel";
+import { downforcePaceDeltaSeconds, downforceTireWearMultiplier } from "./downforce";
 
 const REFERENCE_PACE = 85;
 const PACE_SCALE_SECONDS_PER_POINT = 0.08;
@@ -45,7 +46,9 @@ export function calculateLapTime(
       car.tireAge,
       track.tireWearFactor,
       managementFactor * DRIVING_MODE_WEAR_MULTIPLIER[car.drivingMode]
-    ) * car.tireWearMultiplier;
+    ) *
+    car.tireWearMultiplier *
+    downforceTireWearMultiplier(car.downforce);
 
   const lapsRemainingFraction = Math.max(0, track.totalLaps - car.lapsCompleted) / track.totalLaps;
   const fuelPenalty = MAX_FUEL_PENALTY_SECONDS * lapsRemainingFraction;
@@ -54,6 +57,7 @@ export function calculateLapTime(
   const weatherPenalty = weatherBaseLapPenaltySeconds(weather);
   const fuelLoadDelta = FUEL_LOAD_PACE_DELTA[car.fuelLoad];
   const fuelSavingPenalty = car.fuelSaving ? FUEL_SAVING_PENALTY_SECONDS : 0;
+  const downforceDelta = downforcePaceDeltaSeconds(car.downforce, track);
 
   // Consistency reduces random noise: 100 consistency -> ~0 noise, 0 -> full noise.
   // Wetter conditions amplify that noise further — everyone's a bit scrappier in the rain.
@@ -71,6 +75,7 @@ export function calculateLapTime(
     weatherPenalty +
     fuelLoadDelta +
     fuelSavingPenalty +
+    downforceDelta +
     noise +
     car.damagePenaltySeconds;
 

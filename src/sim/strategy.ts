@@ -1,4 +1,4 @@
-import type { CarState, CautionType, Driver, DrivingMode, FuelLoad, PitStopPlan, TireCompound, Track, WeatherCondition } from "./types";
+import type { CarState, CautionType, DownforceSetting, Driver, DrivingMode, FuelLoad, PitStopPlan, TireCompound, Track, WeatherCondition } from "./types";
 import { tireWearPercent } from "./tires";
 import { weatherMismatch } from "./weather";
 
@@ -10,6 +10,8 @@ export interface InitialStrategy {
   /** AI cars always run "standard" — fuel micromanagement is a player-facing tactical layer,
    *  not something the reactive AI strategy models. */
   fuelLoad: FuelLoad;
+  /** AI cars always run "balanced" — same reasoning as fuelLoad above. */
+  downforce: DownforceSetting;
 }
 
 /**
@@ -21,7 +23,7 @@ export function generateAIStrategy(driver: Driver, _track: Track, random: () => 
   const startingCompound: TireCompound = aggressive ? "soft" : random() < 0.5 ? "medium" : "soft";
   const drivingMode: DrivingMode = aggressive ? "push" : random() < 0.3 ? "conserve" : "balanced";
 
-  return { startingCompound, pitPlan: [], drivingMode, fuelLoad: "standard" };
+  return { startingCompound, pitPlan: [], drivingMode, fuelLoad: "standard", downforce: "balanced" };
 }
 
 export interface AIDecisionContext {

@@ -4,6 +4,7 @@ import { drivers, getDefaultProfile, getTeam, updateDriverProfile } from "./sim/
 import type { DriverProfileEdit } from "./sim/roster";
 import { getFinalResults } from "./sim/raceEngine";
 import { generateWeatherForecast } from "./sim/weather";
+import { recommendedDownforceFor } from "./sim/downforce";
 import { useSeason } from "./state/useSeason";
 import { applyStoredDriverProfile, saveDriverProfile } from "./state/driverProfile";
 import { loadDifficulty, saveDifficulty } from "./state/difficulty";
@@ -43,6 +44,7 @@ const PLAYER_STRATEGY: InitialStrategy = {
   drivingMode: "balanced",
   pitPlan: [{ lap: 27, compound: "hard" }],
   fuelLoad: "standard",
+  downforce: "balanced",
 };
 
 // Runs once at module load, before useSeason's lazy initializer builds the first
@@ -271,11 +273,14 @@ function App() {
             drivingMode: playerCar.drivingMode,
             pitPlan: playerCar.pitPlan,
             fuelLoad: playerCar.fuelLoad,
+            downforce: playerCar.downforce,
           }}
           onStart={confirmPlan}
           hasSave={hasSave}
           onLoad={loadProgress}
           fuelStrategyEnabled={settings.fuelStrategyEnabled}
+          setupTradeoffEnabled={settings.setupTradeoffEnabled}
+          downforceHint={recommendedDownforceFor(track)}
         />
       )}
 
