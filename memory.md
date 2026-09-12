@@ -311,11 +311,13 @@ src/
                   game view still mounts useSeason/useRace underneath either
                   way, so Play/Resume is instant). Composes useSeason + all
                   UI, including the always-visible sidebar weather-forecast
-                  panel (useMemo'd per lap) and the season/damage/weather/
-                  plan/revise/results modals. PLAYER_DRIVER_ID = "k-1"
-                  (Ravi Chandran, Kestrel GP) and PLAYER_STRATEGY are
-                  hardcoded constants near the top — change here to play as
-                  a different driver.
+                  panel (useMemo'd per lap), the persistent caution banner,
+                  and the plan/weather/damage/caution/revise/results/
+                  team-development modals (plan > weather > damage > caution
+                  in render-order priority when more than one could apply
+                  the same lap). PLAYER_DRIVER_ID = "k-1" (Ravi Chandran,
+                  Kestrel GP) and PLAYER_STRATEGY are hardcoded constants
+                  near the top — change here to play as a different driver.
 ```
 
 ## What's been built (chronological, by phase)
@@ -969,6 +971,27 @@ through the exact crash point with zero errors afterward.
 - The user explicitly wants scope kept tight per phase — features not asked
   for (e.g. a "quick single race" mode after season mode replaced it) were
   intentionally left out rather than added speculatively.
+- **Verifying rare/probabilistic mechanics**: playing the game live can't
+  reliably exercise a deliberately-rare event (DNF retirements ~3% over a
+  race, a full Safety Car needs a retirement *and* a 40% escalation roll on
+  top). The established fallback, used in phases 15/17/18: open the running
+  dev server in a browser tab and `await import('/src/sim/<module>.ts')`
+  directly in the console — plain ES modules via Vite, no build/test step
+  needed. From there, either Monte Carlo a roll function thousands of times
+  to confirm its probability distribution, or call `setupRace`/`simulateLap`
+  directly with a hand-built scenario and a constant/seeded random source to
+  deterministically exercise one specific rare branch (e.g. forcing
+  `state.caution = {type: "sc", ...}` to test Safety Car bunching without
+  waiting for one to occur naturally). Pair this with normal live-play
+  verification for the common paths — the console technique is for the
+  long tail, not a replacement for actually playing the feature.
+- When scoping a substantial new feature (safety car/VSC and team
+  development in phases 17-18), the user is happy to answer a batched round
+  of `AskUserQuestion`-style multiple-choice questions up front covering the
+  real architectural forks (mechanic type, UI pattern, data source, scope
+  boundary) rather than being asked one at a time or having decisions made
+  silently on their behalf — then wants a build without further check-ins
+  until the phase is complete and demonstrably verified.
 - **Push to GitHub after every change** (explicit standing instruction,
   2026-09-11): commit and `git push origin master` at the end of each
   feature/change, not just locally commit. No need to ask permission each
