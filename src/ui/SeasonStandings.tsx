@@ -4,6 +4,8 @@ export interface SeasonStandingsProps {
   driverStandings: DriverStandingRow[];
   constructorStandings: ConstructorStandingRow[];
   playerDriverId: string;
+  /** null when the Rival Tracker setting is off. */
+  rivalDriverId: string | null;
 }
 
 function podiumClass(position: number): string {
@@ -13,7 +15,7 @@ function podiumClass(position: number): string {
   return "";
 }
 
-export function SeasonStandings({ driverStandings, constructorStandings, playerDriverId }: SeasonStandingsProps) {
+export function SeasonStandings({ driverStandings, constructorStandings, playerDriverId, rivalDriverId }: SeasonStandingsProps) {
   return (
     <div className="season-standings">
       <div>
@@ -24,11 +26,16 @@ export function SeasonStandings({ driverStandings, constructorStandings, playerD
               <tr
                 key={row.driverId}
                 className={
-                  (row.driverId === playerDriverId ? "player-row" : "") + podiumClass(row.position)
+                  (row.driverId === playerDriverId ? "player-row" : "") +
+                  (row.driverId === rivalDriverId ? " rival-row" : "") +
+                  podiumClass(row.position)
                 }
               >
                 <td className="standings-table__pos">{row.position}</td>
-                <td>{row.driverName}</td>
+                <td>
+                  {row.driverName}
+                  {row.driverId === rivalDriverId && <span className="rival-tag">RIVAL</span>}
+                </td>
                 <td className="standings-table__points">{row.points}</td>
               </tr>
             ))}

@@ -30,9 +30,15 @@ export interface UseSeasonOptions {
 }
 
 export function useSeason({ playerDriverId, playerStrategy, difficulty, settings }: UseSeasonOptions) {
-  // Reads `settings` once, at mount, for the very first season's objective — same lazy
-  // pattern as `initialTrack` below and initialDifficulty/initialSettings in useRace.
-  const [season, setSeason] = useState<SeasonState>(() => createSeason(undefined, settings.seasonObjectivesEnabled));
+  // Reads `settings` once, at mount, for the very first season's objective/rival — same
+  // lazy pattern as `initialTrack` below and initialDifficulty/initialSettings in useRace.
+  const [season, setSeason] = useState<SeasonState>(() =>
+    createSeason({
+      objectivesEnabled: settings.seasonObjectivesEnabled,
+      rivalTrackerEnabled: settings.rivalTrackerEnabled,
+      playerDriverId,
+    })
+  );
   const playerTeamId = getDriver(playerDriverId).teamId;
 
   // Computed once, lazily, at mount — a fresh season's round 1 track is
@@ -63,26 +69,30 @@ export function useSeason({ playerDriverId, playerStrategy, difficulty, settings
   // development only carries forward when Multi-Season Career is on; otherwise a fresh
   // season always starts development back at zero, same as it always has.
   const restartSeason = useCallback(() => {
-    const fresh = createSeason(
-      season.calendar,
-      settings.seasonObjectivesEnabled,
-      settings.multiSeasonCareer ? season.teamDevelopment : undefined
-    );
+    const fresh = createSeason({
+      calendar: season.calendar,
+      objectivesEnabled: settings.seasonObjectivesEnabled,
+      rivalTrackerEnabled: settings.rivalTrackerEnabled,
+      playerDriverId,
+      carryForwardDevelopment: settings.multiSeasonCareer ? season.teamDevelopment : undefined,
+    });
     setSeason(fresh);
     race.switchTrack(currentRoundTrack(fresh)!, fresh.teamDevelopment, difficulty, settings);
-  }, [race, season.calendar, season.teamDevelopment, difficulty, settings]);
+  }, [race, season.calendar, season.teamDevelopment, difficulty, settings, playerDriverId]);
 
   const startCustomSeason = useCallback(
     (calendar: SeasonRound[]) => {
-      const fresh = createSeason(
+      const fresh = createSeason({
         calendar,
-        settings.seasonObjectivesEnabled,
-        settings.multiSeasonCareer ? season.teamDevelopment : undefined
-      );
+        objectivesEnabled: settings.seasonObjectivesEnabled,
+        rivalTrackerEnabled: settings.rivalTrackerEnabled,
+        playerDriverId,
+        carryForwardDevelopment: settings.multiSeasonCareer ? season.teamDevelopment : undefined,
+      });
       setSeason(fresh);
       race.switchTrack(currentRoundTrack(fresh)!, fresh.teamDevelopment, difficulty, settings);
     },
-    [race, difficulty, settings, season.teamDevelopment]
+    [race, difficulty, settings, season.teamDevelopment, playerDriverId]
   );
 
   /** Buys one level of a development category for the player's own team. */

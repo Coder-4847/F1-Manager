@@ -779,6 +779,23 @@ h2 {
   box-shadow: inset 3px 0 0 var(--red);
 }
 
+.rival-row:not(.player-row) {
+  box-shadow: inset 3px 0 0 var(--yellow);
+}
+
+.rival-tag {
+  font-family: var(--heading);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--bg);
+  background: var(--yellow);
+  border-radius: 3px;
+  padding: 0.1rem 0.35rem;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
 @keyframes pit-flash {
   0% {
     background: var(--yellow-dim);

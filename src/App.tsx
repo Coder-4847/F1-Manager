@@ -154,6 +154,8 @@ function App() {
   const playerStanding = standings.find((row) => row.car.isPlayer);
   const track = raceState.track;
 
+  const rivalStanding = season.rivalDriverId ? standings.find((row) => row.car.driver.id === season.rivalDriverId) : undefined;
+
   // Roster-level (not raceState-level) so it's available from the main menu too, before any
   // race has necessarily been set up with the post-swap roster.
   const currentTeammateDriver = drivers.find((d) => d.teamId === playerTeam.id && d.id !== PLAYER_DRIVER_ID)!;
@@ -519,10 +521,29 @@ function App() {
             driverStandings={driverStandings}
             constructorStandings={constructorStandings}
             playerDriverId={PLAYER_DRIVER_ID}
+            rivalDriverId={season.rivalDriverId}
           />
         </section>
 
         <aside className="layout__side">
+          {rivalStanding && playerStanding && (
+            <section>
+              <h2>Rival</h2>
+              <div className="racing-plan__objective">
+                🏁 {rivalStanding.car.driver.name} &middot; P{rivalStanding.position}
+                {rivalStanding.car.retired ? (
+                  <span> &middot; DNF</span>
+                ) : (
+                  <span className="racing-plan__objective-reward">
+                    {" "}
+                    {playerStanding.car.totalTimeSeconds <= rivalStanding.car.totalTimeSeconds ? "Ahead by " : "Behind by "}
+                    {Math.abs(playerStanding.car.totalTimeSeconds - rivalStanding.car.totalTimeSeconds).toFixed(1)}s
+                  </span>
+                )}
+              </div>
+            </section>
+          )}
+
           {season.currentObjective && (
             <section>
               <h2>Objective</h2>

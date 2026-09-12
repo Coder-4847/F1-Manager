@@ -1,5 +1,5 @@
 import type { StandingsRow } from "./raceEngine";
-import { drivers, getTeam, teams } from "./roster";
+import { drivers, getDriver, getTeam, teams } from "./roster";
 import { getTrack, tracks } from "./tracks";
 import type { Track } from "./types";
 import { aiAutoSpend, createInitialDevelopment, purchaseUpgrade } from "./development";
@@ -49,30 +49,65 @@ export interface SeasonState {
    *  when the Race Objectives setting is off. Regenerated fresh every round in
    *  completeRound — see objectives.ts. */
   currentObjective: Objective | null;
+  /** A season-long rival, picked once when the season starts — null when the Rival Tracker
+   *  setting is off. Fixed for the whole season; a new one is picked only when a new season
+   *  starts (restart or custom season), never mid-season. */
+  rivalDriverId: string | null;
 }
 
 export function defaultCalendar(): SeasonRound[] {
   return tracks.map((t) => ({ trackId: t.id, laps: t.totalLaps }));
 }
 
-/**
- * @param objectivesEnabled Defaults true for standalone/test callers; useSeason passes the
- *   live Race Objectives setting.
- * @param carryForwardDevelopment When provided (the Multi-Season Career setting is on),
- *   the new season starts with this development instead of resetting to zero.
- */
-export function createSeason(
-  calendar: SeasonRound[] = defaultCalendar(),
-  objectivesEnabled: boolean = true,
-  carryForwardDevelopment?: Record<string, TeamDevelopment>
-): SeasonState {
+/** Weighted toward drivers on teams closer in performance to the player's own — a rival
+ *  picked from a wildly different tier of the grid wouldn't make for much of a rivalry. */
+function pickRival(playerDriverId: string, random: () => number): string {
+  const playerTeam = getTeam(getDriver(playerDriverId).teamId);
+  const candidates = drivers.filter((d) => d.id !== playerDriverId);
+  const weights = candidates.map(
+    (d) => 1 / (1 + Math.abs(getTeam(d.teamId).carPerformance - playerTeam.carPerformance) * 0.1)
+  );
+  const total = weights.reduce((a, b) => a + b, 0);
+  let roll = random() * total;
+  for (let i = 0; i < candidates.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) return candidates[i].id;
+  }
+  return candidates[candidates.length - 1].id;
+}
+
+export interface CreateSeasonOptions {
+  calendar?: SeasonRound[];
+  /** Defaults true for standalone/test callers; useSeason passes the live setting. */
+  objectivesEnabled?: boolean;
+  /** Defaults true for standalone/test callers; useSeason passes the live setting. Has no
+   *  effect without playerDriverId, since there's nobody to pick a rival relative to. */
+  rivalTrackerEnabled?: boolean;
+  playerDriverId?: string;
+  /** When provided (the Multi-Season Career setting is on), the new season starts with
+   *  this development instead of resetting to zero. */
+  carryForwardDevelopment?: Record<string, TeamDevelopment>;
+  random?: () => number;
+}
+
+export function createSeason(options: CreateSeasonOptions = {}): SeasonState {
+  const {
+    calendar = defaultCalendar(),
+    objectivesEnabled = true,
+    rivalTrackerEnabled = true,
+    playerDriverId,
+    carryForwardDevelopment,
+    random = Math.random,
+  } = options;
+
   return {
     calendar,
     roundIndex: 0,
     driverPoints: Object.fromEntries(drivers.map((d) => [d.id, 0])),
     results: [],
     teamDevelopment: carryForwardDevelopment ?? createInitialDevelopment(teams.map((t) => t.id)),
-    currentObjective: objectivesEnabled ? generateObjective() : null,
+    currentObjective: objectivesEnabled ? generateObjective(random) : null,
+    rivalDriverId: rivalTrackerEnabled && playerDriverId ? pickRival(playerDriverId, random) : null,
   };
 }
 

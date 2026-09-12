@@ -1,11 +1,10 @@
 import type { RaceState } from "../sim/types";
 import type { SeasonState } from "../sim/season";
 
-// Bumped to v13: CarState gained the required startingPosition field (used by the "gain
-// positions" race objective) and SeasonState gained the required currentObjective field —
-// an old save missing either would break objectives.ts's evaluateObjective/generateObjective
-// call sites.
-const SAVE_KEY = "f1-manager-save-v13";
+// Bumped to v14: SeasonState gained the required rivalDriverId field — an old save's
+// missing value would surface as `undefined` everywhere the Rival Tracker UI reads it,
+// though harmlessly (it just renders as "no rival"); bumped anyway for schema consistency.
+const SAVE_KEY = "f1-manager-save-v14";
 
 export interface SeasonSave {
   season: SeasonState;
