@@ -57,8 +57,10 @@ Opens at `http://localhost:5173`. `npm run build` produces the static
 
 ## Architecture
 
-Current as of phase 19 (2026-09-12) — kept in sync with `src/` on every phase;
-if this ever drifts, `find src -type f | sort` is the source of truth.
+The tree below reflects phase 19 (2026-09-12) — kept in sync through then, but
+NOT updated for the new files added in phases 20-27 (see the pointer list
+right after the tree) or the LiveTrackView/trackPaths rewrite in phase 28.
+If this ever drifts further, `find src -type f | sort` is the source of truth.
 
 ```
 src/
@@ -73,10 +75,15 @@ src/
     tracks.ts         12 real-world circuits with per-track lap length, lap
                       count, pit loss, tire wear factor, overtaking difficulty.
     trackPaths.ts     Stylized closed-loop SVG path per track for the live
-                      view (Monza/Monaco/Spa/Suzuka hand-shaped for
-                      recognizable character; the rest procedurally
-                      generated via a seeded PRNG + Catmull-Rom spline).
-                      NOT GPS-accurate — deliberately stylized.
+                      view — as of phase 28, ALL 12 tracks are hand-shaped
+                      around their real defining features (esses, hairpins,
+                      chicanes, long straights), not just the original 4
+                      (Monza/Monaco/Spa/Suzuka from phase 8). NOT
+                      GPS-accurate — deliberately stylized, so every track
+                      gets the same visual treatment. `generatedLoop`
+                      (seeded PRNG + Catmull-Rom spline) still exists as a
+                      fallback for an unrecognized track id, but none of
+                      the 12 real tracks use it anymore.
     tires.ts          Compound pace/degradation curves (soft/medium/hard/
                       intermediate/wet) + a UI-only wear% helper (doesn't
                       affect lap-time math).
@@ -255,24 +262,34 @@ src/
                       throws. Phase 19.
     persistence.ts    localStorage save/load of the whole season
                       ({season, raceState} as one JSON blob). Key is
-                      currently `f1-manager-save-v8` — bumped each time
-                      CarState/RaceState/SeasonState gains a field an old
-                      save wouldn't have (v3: custom-season calendar shape;
-                      v4: weather + damage fields; v5: penaltySeconds/retired/
-                      damageDescription; v6: RaceState.caution; v7:
+                      currently `f1-manager-save-v14` — bumped each time
+                      CarState/RaceState/SeasonState gains a required field
+                      an old save wouldn't have (v3: custom-season calendar
+                      shape; v4: weather + damage fields; v5:
+                      penaltySeconds/retired/damageDescription; v6:
+                      RaceState.caution; v7:
                       CarState.reliabilityMultiplier/tireWearMultiplier +
-                      SeasonState.teamDevelopment; v8: RaceState.difficulty).
-                      Bump again next time the schema changes.
+                      SeasonState.teamDevelopment; v8: RaceState.difficulty;
+                      v9: RaceState.settings (phase 20); v10: CarState
+                      fuelLoad/fuelRemaining/fuelSaving (phase 21); v11:
+                      CarState.downforce (phase 22); v12: RaceState.teamOrder
+                      (phase 24); v13: CarState.startingPosition +
+                      SeasonState.currentObjective (phase 26); v14:
+                      SeasonState.rivalDriverId (phase 27)). Bump again next
+                      time the schema changes.
 
   ui/             Presentational components, one concern each.
     MainMenu.tsx        Full-screen title menu (Play/Resume, Custom Season,
-                      Edit Driver, Team Development, Load Saved Game) — the
-                      app opens here. Phase 16, Team Development button
-                      added phase 18, Easy/Normal/Hard difficulty toggle
-                      added phase 19 (a hint line appears once a race has
-                      already been started, since the change only takes
-                      effect on the next race — Reset/Next Round/Restart/
-                      Custom Season — not the one in progress).
+                      Edit Driver, Team Development, Driver Market, Settings,
+                      Load Saved Game) — the app opens here. Phase 16, Team
+                      Development button added phase 18. The Easy/Normal/Hard
+                      difficulty toggle lived here from phase 19 but **moved
+                      into the new Settings screen in phase 20** (MainMenu now
+                      just has a "Settings" button); Driver Market button
+                      added phase 25. See ui/SettingsScreen.tsx (phase 20,
+                      not yet in this tree — listed in the pointer note right
+                      after it) for the difficulty control + every feature
+                      toggle.
     DriverProfile.tsx   "Edit Driver" modal — name/age/nationality/number.
                       Phase 11.
     SeasonSetup.tsx     "Custom Season" modal — build a calendar from any of
@@ -306,7 +323,12 @@ src/
                       just-earned prize money, since the *next* round's
                       RacingPlan modal blocks reaching Menu (no cancel, by
                       design — see phase 14's Load-bug entry) until a plan
-                      is confirmed.
+                      is confirmed. Gained the round's objective result
+                      (achieved/not + credit bonus) in phase 26 — computed by
+                      App.tsx via `evaluateObjective(season.currentObjective,
+                      standings)` at the moment the results screen opens,
+                      not by `completeRound` (which only runs on Next Round,
+                      too late for this screen — see the phase 26 entry).
     TeamDevelopment.tsx Budget + three upgrade categories (pace/reliability/
                       tire management), each with a 0-5 level, rising cost,
                       and a live effect readout computed from development.ts's
@@ -320,24 +342,38 @@ src/
     Leaderboard.tsx     Framer Motion `layout`-animated rows; pit-stop flash;
                       damage ⚠ badge; DNF rows dimmed and gap-column shows
                       "DNF".
-    LiveTrackView.tsx   SVG track outline + car dots positioned continuously
-                      via getPointAtLength, driven by a requestAnimationFrame
-                      loop. Each car's on-track fraction = an animation
-                      clock (0→1 over one lap's duration) offset by its real
-                      time-gap-to-leader (converted through the track's
-                      average lap time) — so the pack visually bunches/
-                      spreads exactly like the real gaps, not just at lap
-                      boundaries.
+    LiveTrackView.tsx   SVG track outline + car markers positioned
+                      continuously via getPointAtLength, driven by a
+                      requestAnimationFrame loop. Each car's on-track
+                      fraction = an animation clock (0→1 over one lap's
+                      duration) offset by its real time-gap-to-leader
+                      (converted through the track's average lap time) — so
+                      the pack visually bunches/spreads exactly like the
+                      real gaps, not just at lap boundaries. As of phase 28,
+                      markers are a small rotating top-down car silhouette
+                      (`CarShape` — not a plain circle) that faces its
+                      direction of travel each frame (sampled via a small
+                      fixed path-length lookahead + `Math.atan2`), applied
+                      as one `transform="translate(...) rotate(...)
+                      scale(...)"` on the car's wrapping `<g>` — same
+                      ref-based imperative-DOM-update pattern as before, no
+                      React state involved in the animation loop itself.
     PlaybackControls.tsx  Play/Pause/Step/Reset/Speed/Save/Load/Next-Round;
                       `blocked` prop disables Play/Step while any modal gate
                       (plan/damage/weather/caution) is active.
     PlayerControls.tsx    Car condition indicator, tires, damage/penalty
                       status, driving-mode + pit-stop queue, "Revise Plan"
-                      button.
+                      button. Gained a fuel status row (load + remaining
+                      margin, or "fuel saving!") in phase 21, gated by
+                      `fuelStrategyEnabled`, and a "Team Radio" button in
+                      phase 24, gated by `teamOrdersEnabled`.
     EventFeed.tsx          Pit-stop, overtake, damage, weather, penalty,
-                      retirement, and caution event log (one icon each).
+                      retirement, caution, fuel (phase 21), and team-order
+                      (phase 24) event log (one icon each).
     SeasonStandings.tsx    Drivers' + Constructors' championship tables,
-                      podium-tinted top 3.
+                      podium-tinted top 3. Gained a "RIVAL" tag + highlighted
+                      row for the season's rival driver in phase 27, gated by
+                      `rivalTrackerEnabled`.
     TireBadge.tsx          Compound chip + wear bar for all 5 compounds
                       (green intermediate / blue wet added phase 14).
 
@@ -352,6 +388,15 @@ src/
                   the same lap). PLAYER_DRIVER_ID = "k-1" (Ravi Chandran,
                   Kestrel GP) and PLAYER_STRATEGY are hardcoded constants
                   near the top — change here to play as a different driver.
+                  NOT reflected above (phases 20-28, see the pointer list and
+                  phase entries below): also composes a Settings modal, a
+                  non-blocking StrategistSuggestion toast, a Team Radio
+                  modal, a Driver Market modal (reachable from both MainMenu
+                  and the season-complete banner), and two more sidebar
+                  sections (Rival, Objective) alongside the weather forecast.
+                  `settings: GameSettings` and its `handleToggleSetting` live
+                  here too, loaded via `state/settings.ts` at the same lazy
+                  `useState` point as `difficulty`.
 ```
 
 **New files added in phases 20-27** (the tree above predates them —
@@ -1295,9 +1340,10 @@ through the exact crash point with zero errors afterward.
 
 ## Known limitations / deliberate simplifications
 
-- Track shapes in `trackPaths.ts` are stylized, not GPS-accurate — 4 are
-  hand-shaped for recognizable character, the other 8 are procedurally
-  generated (varied but not bespoke). More could be hand-authored if wanted.
+- Track shapes in `trackPaths.ts` are stylized, not GPS-accurate — as of
+  phase 28, all 12 are hand-shaped around their real defining features, but
+  none trace actual GPS coordinates. This is deliberate (see phase 28's
+  entry for why real map data wasn't pulled in), not a limitation to fix.
 - No sound/audio.
 - Single continuous session only — no multiplayer, no cloud save, just one
   localStorage slot per browser.
