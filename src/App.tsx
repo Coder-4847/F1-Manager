@@ -8,6 +8,8 @@ import { useSeason } from "./state/useSeason";
 import { applyStoredDriverProfile, saveDriverProfile } from "./state/driverProfile";
 import { loadDifficulty, saveDifficulty } from "./state/difficulty";
 import type { Difficulty } from "./sim/difficulty";
+import { loadSettings, saveSettings } from "./state/settings";
+import type { GameSettings } from "./sim/settings";
 import { Leaderboard } from "./ui/Leaderboard";
 import { EventFeed } from "./ui/EventFeed";
 import { PlayerControls } from "./ui/PlayerControls";
@@ -23,6 +25,7 @@ import { RacingPlan } from "./ui/RacingPlan";
 import { RevisePlan } from "./ui/RevisePlan";
 import { RaceResults } from "./ui/RaceResults";
 import { MainMenu } from "./ui/MainMenu";
+import { SettingsScreen } from "./ui/SettingsScreen";
 import { TeamDevelopment } from "./ui/TeamDevelopment";
 import { WeatherForecast } from "./ui/WeatherForecast";
 import type { InitialStrategy } from "./sim/strategy";
@@ -47,6 +50,7 @@ applyStoredDriverProfile(PLAYER_DRIVER_ID);
 
 function App() {
   const [difficulty, setDifficultyState] = useState<Difficulty>(() => loadDifficulty());
+  const [settings, setSettingsState] = useState<GameSettings>(() => loadSettings());
 
   const {
     season,
@@ -62,7 +66,7 @@ function App() {
     hasSave,
     saveProgress,
     loadProgress,
-  } = useSeason({ playerDriverId: PLAYER_DRIVER_ID, playerStrategy: PLAYER_STRATEGY, difficulty });
+  } = useSeason({ playerDriverId: PLAYER_DRIVER_ID, playerStrategy: PLAYER_STRATEGY, difficulty, settings });
 
   const {
     raceState,
@@ -98,6 +102,7 @@ function App() {
   const [showRevisePlan, setShowRevisePlan] = useState(false);
   const [showRaceResults, setShowRaceResults] = useState(false);
   const [showTeamDevelopment, setShowTeamDevelopment] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Regenerated once per lap (not every render) — a preview, not a guarantee, same as
   // the one shown pre-race and in the weather alert; see generateWeatherForecast.
@@ -153,6 +158,14 @@ function App() {
     saveDifficulty(next);
   };
 
+  const handleToggleSetting = (key: keyof GameSettings) => {
+    setSettingsState((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      saveSettings(next);
+      return next;
+    });
+  };
+
   if (showMenu) {
     return (
       <>
@@ -162,14 +175,24 @@ function App() {
           totalRounds={season.calendar.length}
           seasonComplete={seasonComplete}
           hasSave={hasSave}
-          difficulty={difficulty}
           onPlay={() => setShowMenu(false)}
           onCustomSeason={() => setShowSeasonSetup(true)}
           onEditDriver={() => setShowProfileEditor(true)}
           onTeamDevelopment={() => setShowTeamDevelopment(true)}
+          onSettings={() => setShowSettings(true)}
           onLoad={handleLoadFromMenu}
-          onSetDifficulty={handleSetDifficulty}
         />
+
+        {showSettings && (
+          <SettingsScreen
+            settings={settings}
+            difficulty={difficulty}
+            hasStartedRace={!planPending}
+            onToggle={handleToggleSetting}
+            onSetDifficulty={handleSetDifficulty}
+            onClose={() => setShowSettings(false)}
+          />
+        )}
 
         {showProfileEditor && (
           <DriverProfile
@@ -326,7 +349,7 @@ function App() {
         onPlay={play}
         onPause={pause}
         onStep={step}
-        onReset={() => reset(season.teamDevelopment, difficulty)}
+        onReset={() => reset(season.teamDevelopment, difficulty, settings)}
         onSetSpeed={setSpeed}
         onSave={saveProgress}
         onLoad={loadProgress}

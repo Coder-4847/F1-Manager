@@ -20,6 +20,8 @@ import { paceBonusForLevel, reliabilityMultiplierForLevel, tireWearMultiplierFor
 import type { TeamDevelopment } from "./development";
 import { AI_SPEED_MULTIPLIER } from "./difficulty";
 import type { Difficulty } from "./difficulty";
+import { DEFAULT_SETTINGS } from "./settings";
+import type { GameSettings } from "./settings";
 import { drivers, getTeam } from "./roster";
 
 export interface RaceSetup {
@@ -32,6 +34,10 @@ export interface RaceSetup {
   teamDevelopment?: Record<string, TeamDevelopment>;
   /** Defaults to "normal" (no AI pace change) when omitted, e.g. a standalone test setup. */
   difficulty?: Difficulty;
+  /** Which optional systems are active this race. Defaults to everything on (DEFAULT_SETTINGS)
+   *  when omitted, e.g. a standalone test setup. Baked into RaceState so a mid-race settings
+   *  change never destabilizes a race already in progress — see difficulty for the same pattern. */
+  settings?: GameSettings;
   random?: () => number;
 }
 
@@ -105,6 +111,7 @@ export function setupRace(setup: RaceSetup): RaceState {
     weather: "dry",
     caution: null,
     difficulty: setup.difficulty ?? "normal",
+    settings: setup.settings ?? DEFAULT_SETTINGS,
   };
 }
 
@@ -149,7 +156,7 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
   const activeCaution = state.caution;
   let cautionTriggeredThisLap: CautionPeriod | null = null;
 
-  const weatherChange = rollForWeatherChange(state.weather, random);
+  const weatherChange = state.settings.weatherEnabled ? rollForWeatherChange(state.weather, random) : null;
   if (weatherChange) {
     state.weather = weatherChange;
     lapEvents.push({
@@ -168,7 +175,8 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
 
     // No new incidents while a caution is already out — the field is running slow and
     // spread out behind it, which is exactly why a caution suppresses further chaos.
-    let damageEvent = activeCaution ? null : rollForDamage(car, state.weather, random);
+    let damageEvent =
+      activeCaution || !state.settings.damageEnabled ? null : rollForDamage(car, state.weather, random);
     if (damageEvent) {
       applyDamage(car, damageEvent);
       lapEvents.push({
@@ -208,7 +216,8 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
     // one of its risk factors) but before anything else — a retiring car stops mid-lap,
     // no lap time, no pit stop, nothing further to compute for it. Suppressed under an
     // existing caution for the same reason as damage above.
-    const retirement = activeCaution ? null : rollForRetirement(car, state.weather, random);
+    const retirement =
+      activeCaution || !state.settings.retirementsEnabled ? null : rollForRetirement(car, state.weather, random);
     if (retirement) {
       car.finished = true;
       car.retired = true;
@@ -219,7 +228,7 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
         driverId: car.driver.id,
         message: `${car.driver.name} retires from the race — ${retirement.reason.toLowerCase()}!`,
       });
-      if (!cautionTriggeredThisLap) {
+      if (!cautionTriggeredThisLap && state.settings.cautionsEnabled) {
         cautionTriggeredThisLap = rollCautionForRetirement(random);
       }
       continue;
@@ -228,11 +237,11 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
     // A retirement always brings out at least a VSC, but a car that survives with serious
     // damage can also bring one out on its own (limping back, marshals clearing debris) —
     // strictly weaker than the retirement trigger above, so it never escalates to a full SC.
-    if (!activeCaution && !cautionTriggeredThisLap && damageEvent) {
+    if (!activeCaution && !cautionTriggeredThisLap && damageEvent && state.settings.cautionsEnabled) {
       cautionTriggeredThisLap = rollCautionForDamage(damageEvent.severity, random);
     }
 
-    const penaltyEvent = activeCaution ? null : rollForPenalty(car, random);
+    const penaltyEvent = activeCaution || !state.settings.penaltiesEnabled ? null : rollForPenalty(car, random);
     if (penaltyEvent) {
       car.penaltySeconds += penaltyEvent.seconds;
       lapEvents.push({

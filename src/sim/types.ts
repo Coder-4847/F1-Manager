@@ -2,6 +2,7 @@
 // This module has zero React/UI dependencies so it can be tested and reused in isolation.
 
 import type { Difficulty } from "./difficulty";
+import type { GameSettings } from "./settings";
 
 export type TireCompound = "soft" | "medium" | "hard" | "intermediate" | "wet";
 
@@ -155,4 +156,7 @@ export interface RaceState {
    *  even if the setting is changed mid-season. Scales AI (never player) pace — see
    *  AI_SPEED_MULTIPLIER in difficulty.ts. */
   difficulty: Difficulty;
+  /** Which optional systems are active this race — baked in at setupRace, same as
+   *  difficulty, so a mid-race Settings change never destabilizes a race in progress. */
+  settings: GameSettings;
 }

@@ -14,6 +14,7 @@ import type { DrivingMode, PitStopPlan, RaceState, TireCompound, Track } from ".
 import type { InitialStrategy } from "../sim/strategy";
 import type { TeamDevelopment } from "../sim/development";
 import type { Difficulty } from "../sim/difficulty";
+import type { GameSettings } from "../sim/settings";
 
 export type PlaybackSpeed = 0.5 | 1 | 2 | 4;
 
@@ -37,6 +38,9 @@ export interface UseRaceOptions {
   /** Difficulty for the very first race only (lazy initial state, evaluated once at mount) —
    *  same reasoning and the same explicit-argument treatment in `reset`/`switchTrack`. */
   initialDifficulty: Difficulty;
+  /** Settings for the very first race only (lazy initial state, evaluated once at mount) —
+   *  same reasoning and the same explicit-argument treatment in `reset`/`switchTrack`. */
+  initialSettings: GameSettings;
 }
 
 /**
@@ -50,6 +54,7 @@ export function useRace({
   playerStrategy,
   initialTeamDevelopment,
   initialDifficulty,
+  initialSettings,
 }: UseRaceOptions) {
   const [raceState, setRaceState] = useState<RaceState>(() =>
     setupRace({
@@ -58,6 +63,7 @@ export function useRace({
       playerStrategy,
       teamDevelopment: initialTeamDevelopment,
       difficulty: initialDifficulty,
+      settings: initialSettings,
     })
   );
   const [playing, setPlaying] = useState(false);
@@ -154,7 +160,7 @@ export function useRace({
   // option value, so a captured option here would still read the *previous* round's
   // development. Passing it explicitly at the call site sidesteps that staleness entirely.
   const reset = useCallback(
-    (teamDevelopment: Record<string, TeamDevelopment>, difficulty: Difficulty) => {
+    (teamDevelopment: Record<string, TeamDevelopment>, difficulty: Difficulty, settings: GameSettings) => {
       setPlaying(false);
       setDamageAlert(false);
       setWeatherAlert(false);
@@ -162,21 +168,21 @@ export function useRace({
       setPlanPending(true);
       lastCheckedLapRef.current = 0;
       setRaceState((prev) =>
-        setupRace({ track: prev.track, playerDriverId, playerStrategy, teamDevelopment, difficulty })
+        setupRace({ track: prev.track, playerDriverId, playerStrategy, teamDevelopment, difficulty, settings })
       );
     },
     [playerDriverId, playerStrategy]
   );
 
   const switchTrack = useCallback(
-    (track: Track, teamDevelopment: Record<string, TeamDevelopment>, difficulty: Difficulty) => {
+    (track: Track, teamDevelopment: Record<string, TeamDevelopment>, difficulty: Difficulty, settings: GameSettings) => {
       setPlaying(false);
       setDamageAlert(false);
       setWeatherAlert(false);
       setCautionAlert(false);
       setPlanPending(true);
       lastCheckedLapRef.current = 0;
-      setRaceState(setupRace({ track, playerDriverId, playerStrategy, teamDevelopment, difficulty }));
+      setRaceState(setupRace({ track, playerDriverId, playerStrategy, teamDevelopment, difficulty, settings }));
     },
     [playerDriverId, playerStrategy]
   );

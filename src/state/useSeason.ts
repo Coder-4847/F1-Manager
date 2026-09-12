@@ -13,6 +13,7 @@ import type { SeasonRound, SeasonState } from "../sim/season";
 import type { InitialStrategy } from "../sim/strategy";
 import type { UpgradeCategory } from "../sim/development";
 import type { Difficulty } from "../sim/difficulty";
+import type { GameSettings } from "../sim/settings";
 import { getDriver } from "../sim/roster";
 import { hasSeasonSave, loadSeasonProgress, saveSeasonProgress } from "./persistence";
 
@@ -23,9 +24,12 @@ export interface UseSeasonOptions {
    *  next race that gets set up (restart, next round, custom season) without needing a
    *  full app reload. */
   difficulty: Difficulty;
+  /** Same freshness reasoning as difficulty — a Settings toggle takes effect on the next
+   *  race that gets set up, not the one already in progress. */
+  settings: GameSettings;
 }
 
-export function useSeason({ playerDriverId, playerStrategy, difficulty }: UseSeasonOptions) {
+export function useSeason({ playerDriverId, playerStrategy, difficulty, settings }: UseSeasonOptions) {
   const [season, setSeason] = useState<SeasonState>(() => createSeason());
   const playerTeamId = getDriver(playerDriverId).teamId;
 
@@ -39,6 +43,7 @@ export function useSeason({ playerDriverId, playerStrategy, difficulty }: UseSea
     playerStrategy,
     initialTeamDevelopment: season.teamDevelopment,
     initialDifficulty: difficulty,
+    initialSettings: settings,
   });
 
   const seasonComplete = isSeasonComplete(season);
@@ -48,24 +53,24 @@ export function useSeason({ playerDriverId, playerStrategy, difficulty }: UseSea
     const updated = completeRound(season, race.standings);
     setSeason(updated);
     const nextTrack = currentRoundTrack(updated);
-    if (nextTrack) race.switchTrack(nextTrack, updated.teamDevelopment, difficulty);
-  }, [race, season, seasonComplete, difficulty]);
+    if (nextTrack) race.switchTrack(nextTrack, updated.teamDevelopment, difficulty, settings);
+  }, [race, season, seasonComplete, difficulty, settings]);
 
   // Restarts using the *current* calendar (default or custom) — a season built
   // via startCustomSeason stays the same shape when restarted, not the default 12.
   const restartSeason = useCallback(() => {
     const fresh = createSeason(season.calendar);
     setSeason(fresh);
-    race.switchTrack(currentRoundTrack(fresh)!, fresh.teamDevelopment, difficulty);
-  }, [race, season.calendar, difficulty]);
+    race.switchTrack(currentRoundTrack(fresh)!, fresh.teamDevelopment, difficulty, settings);
+  }, [race, season.calendar, difficulty, settings]);
 
   const startCustomSeason = useCallback(
     (calendar: SeasonRound[]) => {
       const fresh = createSeason(calendar);
       setSeason(fresh);
-      race.switchTrack(currentRoundTrack(fresh)!, fresh.teamDevelopment, difficulty);
+      race.switchTrack(currentRoundTrack(fresh)!, fresh.teamDevelopment, difficulty, settings);
     },
-    [race, difficulty]
+    [race, difficulty, settings]
   );
 
   /** Buys one level of a development category for the player's own team. */
