@@ -22,6 +22,8 @@ export interface PlayerControlsProps {
   onCancelPitStop: () => void;
   onOpenRevisePlan: () => void;
   fuelStrategyEnabled: boolean;
+  teamOrdersEnabled: boolean;
+  onOpenTeamRadio: () => void;
 }
 
 export function PlayerControls({
@@ -32,6 +34,8 @@ export function PlayerControls({
   onCancelPitStop,
   onOpenRevisePlan,
   fuelStrategyEnabled,
+  teamOrdersEnabled,
+  onOpenTeamRadio,
 }: PlayerControlsProps) {
   const [selectedCompound, setSelectedCompound] = useState<TireCompound>("medium");
   const pendingStop = car.pitPlan[0];
@@ -132,6 +136,14 @@ export function PlayerControls({
           Revise Plan (Forecast)
         </button>
       </div>
+
+      {teamOrdersEnabled && (
+        <div className="player-controls__row">
+          <button className="player-controls__revise-plan" onClick={onOpenTeamRadio} disabled={car.finished}>
+            Team Radio
+          </button>
+        </div>
+      )}
     </div>
   );
 }

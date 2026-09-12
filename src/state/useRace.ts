@@ -6,13 +6,14 @@ import {
   queuePlayerPitStop,
   setPlayerDrivingMode,
   setPlayerPitPlan,
+  setPlayerTeamOrder,
   setupRace,
   simulateLap,
 } from "../sim/raceEngine";
 import { weatherMismatch } from "../sim/weather";
 import { checkStrategistSuggestion } from "../sim/strategist";
 import type { StrategistSuggestion } from "../sim/strategist";
-import type { DrivingMode, PitStopPlan, RaceState, TireCompound, Track } from "../sim/types";
+import type { DrivingMode, PitStopPlan, RaceState, TeamOrder, TireCompound, Track } from "../sim/types";
 import type { InitialStrategy } from "../sim/strategy";
 import type { TeamDevelopment } from "../sim/development";
 import type { Difficulty } from "../sim/difficulty";
@@ -250,6 +251,15 @@ export function useRace({
     });
   }, []);
 
+  /** Sets or clears (null) the player's standing team order to their AI teammate. */
+  const setTeamOrder = useCallback((order: TeamOrder | null) => {
+    setRaceState((prev) => {
+      const next = structuredClone(prev);
+      setPlayerTeamOrder(next, order);
+      return next;
+    });
+  }, []);
+
   /** Replaces the player's entire remaining pit stop schedule — used by the mid-race Revise Plan screen. */
   const updatePitPlan = useCallback((stops: PitStopPlan[]) => {
     setRaceState((prev) => {
@@ -352,6 +362,7 @@ export function useRace({
     setDrivingMode,
     queuePitStop,
     cancelPitStop,
+    setTeamOrder,
     updatePitPlan,
     resolveDamage,
     resolveWeather,

@@ -1,9 +1,9 @@
 import type { RaceState } from "../sim/types";
 import type { SeasonState } from "../sim/season";
 
-// Bumped to v11: CarState gained the required downforce field — an old save's missing
-// value would break downforcePaceDeltaSeconds(undefined, track) (NaN lap times).
-const SAVE_KEY = "f1-manager-save-v11";
+// Bumped to v12: RaceState gained the required teamOrder field — an old save's missing
+// value would break the battle-resolution team-order checks in simulateLap.
+const SAVE_KEY = "f1-manager-save-v12";
 
 export interface SeasonSave {
   season: SeasonState;

@@ -1672,3 +1672,57 @@ h2 {
 .strategist-suggestion__accept:hover {
   background: #ff1a12;
 }
+
+/* Team Radio modal */
+
+.team-radio__subtitle {
+  color: var(--text);
+  font-size: 0.85rem;
+  margin: -0.25rem 0 0.75rem;
+}
+
+.team-radio__status {
+  font-family: var(--heading);
+  font-size: 0.85rem;
+  color: var(--yellow);
+  background: var(--panel-bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.team-radio__card {
+  border: 1px solid var(--border);
+  background: var(--panel-bg-2);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.team-radio__card h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+}
+
+.team-radio__desc {
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 140%;
+  margin: 0 0 0.6rem;
+}
+
+.team-radio__block-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.team-radio__block-row select {
+  flex: 1;
+  font: inherit;
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--panel-bg);
+  color: var(--text-h);
+}

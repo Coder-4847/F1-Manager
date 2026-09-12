@@ -26,6 +26,7 @@ import { RacingPlan } from "./ui/RacingPlan";
 import { RevisePlan } from "./ui/RevisePlan";
 import { RaceResults } from "./ui/RaceResults";
 import { StrategistSuggestionCard } from "./ui/StrategistSuggestion";
+import { TeamRadio } from "./ui/TeamRadio";
 import { MainMenu } from "./ui/MainMenu";
 import { SettingsScreen } from "./ui/SettingsScreen";
 import { TeamDevelopment } from "./ui/TeamDevelopment";
@@ -92,6 +93,7 @@ function App() {
     setDrivingMode,
     queuePitStop,
     cancelPitStop,
+    setTeamOrder,
     updatePitPlan,
     resolveDamage,
     resolveWeather,
@@ -110,6 +112,7 @@ function App() {
   const [showRaceResults, setShowRaceResults] = useState(false);
   const [showTeamDevelopment, setShowTeamDevelopment] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showTeamRadio, setShowTeamRadio] = useState(false);
 
   // Regenerated once per lap (not every render) — a preview, not a guarantee, same as
   // the one shown pre-race and in the weather alert; see generateWeatherForecast.
@@ -131,6 +134,21 @@ function App() {
   const playerTeam = getTeam(playerDriver.teamId);
   const playerStanding = standings.find((row) => row.car.isPlayer);
   const track = raceState.track;
+
+  const teammateCar = raceState.cars.find((c) => c.team.id === playerTeam.id && !c.isPlayer);
+  // Candidates for a "block" order — the cars currently closest to the teammate on track,
+  // since that's who they'd actually be defending against.
+  const teamRadioRivals = teammateCar
+    ? [...raceState.cars]
+        .filter((c) => !c.isPlayer && c.driver.id !== teammateCar.driver.id && !c.retired && !c.finished)
+        .sort(
+          (a, b) =>
+            Math.abs(a.totalTimeSeconds - teammateCar.totalTimeSeconds) -
+            Math.abs(b.totalTimeSeconds - teammateCar.totalTimeSeconds)
+        )
+        .slice(0, 6)
+        .map((c) => ({ id: c.driver.id, name: c.driver.name }))
+    : [];
   const roundNumber = Math.min(season.roundIndex + 1, season.calendar.length);
 
   const handleSaveProfile = (edit: DriverProfileEdit) => {
@@ -324,6 +342,16 @@ function App() {
         />
       )}
 
+      {showTeamRadio && teammateCar && (
+        <TeamRadio
+          teammateName={teammateCar.driver.name}
+          currentOrder={raceState.teamOrder}
+          rivals={teamRadioRivals}
+          onSetOrder={setTeamOrder}
+          onClose={() => setShowTeamRadio(false)}
+        />
+      )}
+
       {showRevisePlan && playerCar && (
         <RevisePlan
           trackName={track.name}
@@ -438,6 +466,8 @@ function App() {
                 onCancelPitStop={cancelPitStop}
                 onOpenRevisePlan={handleOpenRevisePlan}
                 fuelStrategyEnabled={settings.fuelStrategyEnabled}
+                teamOrdersEnabled={settings.teamOrdersEnabled}
+                onOpenTeamRadio={() => setShowTeamRadio(true)}
               />
             </section>
           )}

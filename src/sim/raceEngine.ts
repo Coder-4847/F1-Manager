@@ -1,4 +1,4 @@
-import type { CarState, CautionPeriod, DownforceSetting, Driver, DrivingMode, FuelLoad, LapEvent, PitStopPlan, RaceState, TireCompound, Track } from "./types";
+import type { CarState, CautionPeriod, DownforceSetting, Driver, DrivingMode, FuelLoad, LapEvent, PitStopPlan, RaceState, TeamOrder, TireCompound, Track } from "./types";
 import type { AIDecisionContext, InitialStrategy } from "./strategy";
 import { calculateLapTime } from "./lapTime";
 import { pitStopTimeLoss } from "./pitStop";
@@ -130,6 +130,7 @@ export function setupRace(setup: RaceSetup): RaceState {
     caution: null,
     difficulty: setup.difficulty ?? "normal",
     settings,
+    teamOrder: null,
   };
 }
 
@@ -173,6 +174,13 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
   // down; its effects start next lap instead (see the trigger/decrement logic below).
   const activeCaution = state.caution;
   let cautionTriggeredThisLap: CautionPeriod | null = null;
+
+  // Resolved once per lap for the team-orders battle-resolution special-casing below —
+  // null when the setting is off or the player has no teammate (shouldn't happen with the
+  // current 2-drivers-per-team roster, but defensive).
+  const player = state.cars.find((c) => c.isPlayer);
+  const teammate = player ? state.cars.find((c) => c.team.id === player.team.id && c.driver.id !== player.driver.id) : undefined;
+  const activeTeamOrder = state.settings.teamOrdersEnabled ? state.teamOrder : null;
 
   const weatherChange = state.settings.weatherEnabled ? rollForWeatherChange(state.weather, random) : null;
   if (weatherChange) {
@@ -350,26 +358,77 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
           finalTotal = aheadFinal + Math.max(gap * (1 - SC_GAP_CLOSURE_RATE), SC_MIN_GAP_SECONDS);
         }
       } else {
-        const gap = naiveTotal - aheadFinal;
-        if (Math.abs(gap) < BATTLE_ZONE_SECONDS) {
-          const passed = resolveOvertakeAttempt(
-            car,
-            rawLapTime,
-            aheadEntry.car,
-            aheadEntry.rawLapTime,
-            state.track,
-            random
-          );
-          if (passed) {
-            finalTotal = Math.min(naiveTotal, aheadFinal - PASS_MARGIN_SECONDS);
-            lapEvents.push({
-              type: "overtake",
-              lap: state.currentLap,
-              driverId,
-              message: `${car.driver.name} passes ${aheadEntry.car.driver.name} for position!`,
-            });
-          } else {
-            finalTotal = Math.max(naiveTotal, aheadFinal + HELD_UP_GAP_SECONDS);
+        const isPlayerTeammatePair =
+          teammate !== undefined &&
+          ((car.isPlayer && aheadEntry.car.driver.id === teammate.driver.id) ||
+            (aheadEntry.car.isPlayer && car.driver.id === teammate.driver.id));
+
+        if (activeTeamOrder?.type === "hold" && isPlayerTeammatePair) {
+          // Hold station: whichever of the two is currently trailing doesn't fight past
+          // the other, regardless of who's actually quicker this lap — persists until
+          // canceled, so no event is logged every lap it merely holds.
+          finalTotal = Math.max(naiveTotal, aheadFinal + HELD_UP_GAP_SECONDS);
+        } else if (
+          activeTeamOrder?.type === "let-through" &&
+          car.isPlayer &&
+          aheadEntry.car.driver.id === teammate?.driver.id
+        ) {
+          // One-shot: the teammate concedes the position outright the moment the player is
+          // actually running right behind them, then the order is consumed.
+          finalTotal = Math.min(naiveTotal, aheadFinal - PASS_MARGIN_SECONDS);
+          lapEvents.push({
+            type: "team-order",
+            lap: state.currentLap,
+            driverId,
+            message: `${aheadEntry.car.driver.name} lets ${car.driver.name} through under team orders!`,
+          });
+          state.teamOrder = null;
+        } else if (
+          activeTeamOrder?.type === "block" &&
+          activeTeamOrder.targetDriverId === car.driver.id &&
+          aheadEntry.car.driver.id === teammate?.driver.id
+        ) {
+          // The teammate is defending specifically against this rival on team orders — the
+          // attacker has to win the overtake roll twice in a row to actually get through.
+          const gap = naiveTotal - aheadFinal;
+          if (Math.abs(gap) < BATTLE_ZONE_SECONDS) {
+            const passed =
+              resolveOvertakeAttempt(car, rawLapTime, aheadEntry.car, aheadEntry.rawLapTime, state.track, random) &&
+              resolveOvertakeAttempt(car, rawLapTime, aheadEntry.car, aheadEntry.rawLapTime, state.track, random);
+            if (passed) {
+              finalTotal = Math.min(naiveTotal, aheadFinal - PASS_MARGIN_SECONDS);
+              lapEvents.push({
+                type: "overtake",
+                lap: state.currentLap,
+                driverId,
+                message: `${car.driver.name} passes ${aheadEntry.car.driver.name} for position!`,
+              });
+            } else {
+              finalTotal = Math.max(naiveTotal, aheadFinal + HELD_UP_GAP_SECONDS);
+            }
+          }
+        } else {
+          const gap = naiveTotal - aheadFinal;
+          if (Math.abs(gap) < BATTLE_ZONE_SECONDS) {
+            const passed = resolveOvertakeAttempt(
+              car,
+              rawLapTime,
+              aheadEntry.car,
+              aheadEntry.rawLapTime,
+              state.track,
+              random
+            );
+            if (passed) {
+              finalTotal = Math.min(naiveTotal, aheadFinal - PASS_MARGIN_SECONDS);
+              lapEvents.push({
+                type: "overtake",
+                lap: state.currentLap,
+                driverId,
+                message: `${car.driver.name} passes ${aheadEntry.car.driver.name} for position!`,
+              });
+            } else {
+              finalTotal = Math.max(naiveTotal, aheadFinal + HELD_UP_GAP_SECONDS);
+            }
           }
         }
       }
@@ -480,6 +539,12 @@ export function setPlayerPitPlan(state: RaceState, stops: PitStopPlan[]): void {
 export function cancelPlayerPitStop(state: RaceState): void {
   const car = getPlayerCar(state);
   if (car) car.pitPlan = [];
+}
+
+/** Sets (or clears, with null) the player's standing radio order to their AI teammate —
+ *  see the battle-resolution special-casing in simulateLap for what each order actually does. */
+export function setPlayerTeamOrder(state: RaceState, order: TeamOrder | null): void {
+  state.teamOrder = order;
 }
 
 export function runFullRace(state: RaceState, random: () => number = Math.random): RaceState {

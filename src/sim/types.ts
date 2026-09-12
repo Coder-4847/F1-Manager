@@ -16,6 +16,17 @@ export type FuelLoad = "light" | "standard" | "heavy";
  *  character (power tracks favor low, twisty tracks favor high). See downforce.ts. */
 export type DownforceSetting = "low" | "balanced" | "high";
 
+/** A standing radio order to the player's AI teammate. "hold" persists until canceled;
+ *  "let-through" is one-shot and clears itself the moment it takes effect; "block" persists
+ *  until canceled or replaced with a different targetDriverId. */
+export type TeamOrderType = "hold" | "let-through" | "block";
+
+export interface TeamOrder {
+  type: TeamOrderType;
+  /** Which rival to defend against — only meaningful for type "block". */
+  targetDriverId?: string;
+}
+
 /** dry = normal grip; damp = light rain/drying track, suits intermediates; wet = heavy rain, suits full wets. */
 export type WeatherCondition = "dry" | "damp" | "wet";
 
@@ -156,7 +167,7 @@ export interface CarState {
 }
 
 export interface LapEvent {
-  type: "pit-stop" | "overtake" | "damage" | "weather" | "penalty" | "retirement" | "caution" | "fuel";
+  type: "pit-stop" | "overtake" | "damage" | "weather" | "penalty" | "retirement" | "caution" | "fuel" | "team-order";
   lap: number;
   /** Empty for race-wide events (weather, caution) that aren't tied to one car. */
   driverId: string;
@@ -179,4 +190,7 @@ export interface RaceState {
   /** Which optional systems are active this race — baked in at setupRace, same as
    *  difficulty, so a mid-race Settings change never destabilizes a race in progress. */
   settings: GameSettings;
+  /** A standing radio order to the player's teammate, or null when racing freely. See
+   *  TeamOrder and the battle-resolution special-casing in raceEngine.ts's simulateLap. */
+  teamOrder: TeamOrder | null;
 }
