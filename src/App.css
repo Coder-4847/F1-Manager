@@ -1726,3 +1726,47 @@ h2 {
   background: var(--panel-bg);
   color: var(--text-h);
 }
+
+/* Driver Market modal */
+
+.driver-market__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.driver-market__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid var(--border);
+  background: var(--panel-bg-2);
+  border-radius: 8px;
+  padding: 0.7rem 0.9rem;
+}
+
+.driver-market__info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.driver-market__name {
+  font-weight: 600;
+  color: var(--text-h);
+  font-size: 0.9rem;
+}
+
+.driver-market__team {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.driver-market__stats {
+  color: var(--text);
+  font-size: 0.75rem;
+}

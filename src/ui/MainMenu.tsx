@@ -8,6 +8,7 @@ export interface MainMenuProps {
   onCustomSeason: () => void;
   onEditDriver: () => void;
   onTeamDevelopment: () => void;
+  onDriverMarket: () => void;
   onSettings: () => void;
   onLoad: () => void;
 }
@@ -22,6 +23,7 @@ export function MainMenu({
   onCustomSeason,
   onEditDriver,
   onTeamDevelopment,
+  onDriverMarket,
   onSettings,
   onLoad,
 }: MainMenuProps) {
@@ -48,6 +50,9 @@ export function MainMenu({
           </button>
           <button className="main-menu__btn" onClick={onTeamDevelopment}>
             Team Development
+          </button>
+          <button className="main-menu__btn" onClick={onDriverMarket}>
+            Driver Market
           </button>
           <button className="main-menu__btn" onClick={onSettings}>
             Settings

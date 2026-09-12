@@ -1,12 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
-import { drivers, getDefaultProfile, getTeam, updateDriverProfile } from "./sim/roster";
+import {
+  applyTeamAssignments,
+  currentTeamAssignments,
+  drivers,
+  getDefaultProfile,
+  getTeam,
+  resetDriverMarket,
+  swapDriverTeams,
+  updateDriverProfile,
+} from "./sim/roster";
 import type { DriverProfileEdit } from "./sim/roster";
 import { getFinalResults } from "./sim/raceEngine";
 import { generateWeatherForecast } from "./sim/weather";
 import { recommendedDownforceFor } from "./sim/downforce";
 import { useSeason } from "./state/useSeason";
 import { applyStoredDriverProfile, saveDriverProfile } from "./state/driverProfile";
+import { clearDriverMarketSwap, loadDriverMarketSwap, saveDriverMarketSwap } from "./state/driverMarket";
 import { loadDifficulty, saveDifficulty } from "./state/difficulty";
 import type { Difficulty } from "./sim/difficulty";
 import { loadSettings, saveSettings } from "./state/settings";
@@ -27,6 +37,7 @@ import { RevisePlan } from "./ui/RevisePlan";
 import { RaceResults } from "./ui/RaceResults";
 import { StrategistSuggestionCard } from "./ui/StrategistSuggestion";
 import { TeamRadio } from "./ui/TeamRadio";
+import { DriverMarket } from "./ui/DriverMarket";
 import { MainMenu } from "./ui/MainMenu";
 import { SettingsScreen } from "./ui/SettingsScreen";
 import { TeamDevelopment } from "./ui/TeamDevelopment";
@@ -52,6 +63,12 @@ const PLAYER_STRATEGY: InitialStrategy = {
 // Runs once at module load, before useSeason's lazy initializer builds the first
 // race — applies any profile edit saved in a previous session to the roster.
 applyStoredDriverProfile(PLAYER_DRIVER_ID);
+
+// Same idea for a Driver Market trade — reapplied unconditionally on load (a plain reload
+// should never quietly undo a trade); it's App's restart/custom-season handlers below that
+// decide whether to revert it, based on the Driver Market Persists setting.
+const savedDriverMarketSwap = loadDriverMarketSwap();
+if (savedDriverMarketSwap) applyTeamAssignments(savedDriverMarketSwap);
 
 function App() {
   const [difficulty, setDifficultyState] = useState<Difficulty>(() => loadDifficulty());
@@ -113,6 +130,7 @@ function App() {
   const [showTeamDevelopment, setShowTeamDevelopment] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showTeamRadio, setShowTeamRadio] = useState(false);
+  const [showDriverMarket, setShowDriverMarket] = useState(false);
 
   // Regenerated once per lap (not every render) — a preview, not a guarantee, same as
   // the one shown pre-race and in the weather alert; see generateWeatherForecast.
@@ -134,6 +152,13 @@ function App() {
   const playerTeam = getTeam(playerDriver.teamId);
   const playerStanding = standings.find((row) => row.car.isPlayer);
   const track = raceState.track;
+
+  // Roster-level (not raceState-level) so it's available from the main menu too, before any
+  // race has necessarily been set up with the post-swap roster.
+  const currentTeammateDriver = drivers.find((d) => d.teamId === playerTeam.id && d.id !== PLAYER_DRIVER_ID)!;
+  const driverMarketCandidates = drivers
+    .filter((d) => d.id !== PLAYER_DRIVER_ID && d.id !== currentTeammateDriver.id)
+    .map((d) => ({ driver: d, teamName: getTeam(d.teamId).name }));
 
   const teammateCar = raceState.cars.find((c) => c.team.id === playerTeam.id && !c.isPlayer);
   // Candidates for a "block" order — the cars currently closest to the teammate on track,
@@ -157,10 +182,32 @@ function App() {
     setShowProfileEditor(false);
   };
 
+  // A new season is the one point a Driver Market trade might revert — unless the player
+  // has turned on Driver Market Persists, matching how team development already resets
+  // every season by default.
+  const resetDriverMarketIfNotPersisting = () => {
+    if (!settings.driverMarketPersists) {
+      resetDriverMarket();
+      clearDriverMarketSwap();
+    }
+  };
+
   const handleStartCustomSeason = (calendar: SeasonRound[]) => {
+    resetDriverMarketIfNotPersisting();
     startCustomSeason(calendar);
     setShowSeasonSetup(false);
     setShowMenu(false);
+  };
+
+  const handleRestartSeason = () => {
+    resetDriverMarketIfNotPersisting();
+    restartSeason();
+  };
+
+  const handleSwapDriver = (candidateDriverId: string) => {
+    swapDriverTeams(currentTeammateDriver.id, candidateDriverId);
+    saveDriverMarketSwap(currentTeamAssignments());
+    setShowDriverMarket(false);
   };
 
   const handleOpenRevisePlan = () => {
@@ -204,6 +251,7 @@ function App() {
           onCustomSeason={() => setShowSeasonSetup(true)}
           onEditDriver={() => setShowProfileEditor(true)}
           onTeamDevelopment={() => setShowTeamDevelopment(true)}
+          onDriverMarket={() => setShowDriverMarket(true)}
           onSettings={() => setShowSettings(true)}
           onLoad={handleLoadFromMenu}
         />
@@ -248,6 +296,16 @@ function App() {
             development={season.teamDevelopment[playerTeamId]}
             onBuy={purchaseUpgrade}
             onClose={() => setShowTeamDevelopment(false)}
+          />
+        )}
+
+        {showDriverMarket && (
+          <DriverMarket
+            teammateName={currentTeammateDriver.name}
+            candidates={driverMarketCandidates}
+            persists={settings.driverMarketPersists}
+            onSwap={handleSwapDriver}
+            onClose={() => setShowDriverMarket(false)}
           />
         )}
       </>
@@ -406,8 +464,20 @@ function App() {
 
       {seasonComplete && (
         <div className="season-complete-banner">
-          Season complete! <button onClick={restartSeason}>Start New Season</button>
+          Season complete!{" "}
+          <button onClick={() => setShowDriverMarket(true)}>Driver Market</button>{" "}
+          <button onClick={handleRestartSeason}>Start New Season</button>
         </div>
+      )}
+
+      {showDriverMarket && (
+        <DriverMarket
+          teammateName={currentTeammateDriver.name}
+          candidates={driverMarketCandidates}
+          persists={settings.driverMarketPersists}
+          onSwap={handleSwapDriver}
+          onClose={() => setShowDriverMarket(false)}
+        />
       )}
 
       {playerStanding && (

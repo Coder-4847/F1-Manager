@@ -57,6 +57,10 @@ const defaultProfiles = new Map<string, DriverProfileEdit>(
     .map((d) => [d.id, { name: d.name, age: d.age!, nationality: d.nationality!, number: d.number! }])
 );
 
+// Same idea, for the Driver Market: the original team every driver started on, so a swap
+// can always be reverted exactly, however many trades happened since (see resetDriverMarket).
+const defaultTeamIds: Record<string, string> = Object.fromEntries(drivers.map((d) => [d.id, d.teamId]));
+
 export function getTeam(teamId: string): Team {
   const team = teams.find((t) => t.id === teamId);
   if (!team) throw new Error(`Unknown team id: ${teamId}`);
@@ -91,4 +95,36 @@ export function getDefaultProfile(driverId: string): DriverProfileEdit {
  */
 export function updateDriverProfile(driverId: string, edit: DriverProfileEdit): void {
   Object.assign(getDriver(driverId), edit);
+}
+
+/** Snapshot of every driver's current team assignment — used to persist a Driver Market
+ *  swap (see state/driverMarket.ts) so it can be reapplied on the next page load. */
+export function currentTeamAssignments(): Record<string, string> {
+  return Object.fromEntries(drivers.map((d) => [d.id, d.teamId]));
+}
+
+/** Reapplies a saved team-assignment snapshot in place — same mutate-in-place reasoning as
+ *  updateDriverProfile, so every existing reference picks up the change immediately. */
+export function applyTeamAssignments(assignments: Record<string, string>): void {
+  for (const driver of drivers) {
+    const teamId = assignments[driver.id];
+    if (teamId) driver.teamId = teamId;
+  }
+}
+
+/** A straight trade: the two drivers swap which team they race for. Used by the Driver
+ *  Market to move a chosen AI driver into the player's second seat, with the player's
+ *  former teammate moving to the other driver's old team in return. */
+export function swapDriverTeams(driverAId: string, driverBId: string): void {
+  const a = getDriver(driverAId);
+  const b = getDriver(driverBId);
+  const aTeamId = a.teamId;
+  a.teamId = b.teamId;
+  b.teamId = aTeamId;
+}
+
+/** Reverts every driver to the team they started on — used when a season restarts and the
+ *  Driver Market Persists setting is off (the default). */
+export function resetDriverMarket(): void {
+  applyTeamAssignments(defaultTeamIds);
 }
