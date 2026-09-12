@@ -354,6 +354,14 @@ src/
                   near the top — change here to play as a different driver.
 ```
 
+**New files added in phases 20-27** (the tree above predates them —
+`find src -type f | sort` is the source of truth if this list ever drifts):
+`sim/settings.ts` (GameSettings + toggle metadata), `sim/fuel.ts`,
+`sim/downforce.ts`, `sim/strategist.ts`, `sim/objectives.ts`,
+`state/settings.ts`, `state/driverMarket.ts`, `ui/SettingsScreen.tsx`,
+`ui/StrategistSuggestion.tsx`, `ui/TeamRadio.tsx`, `ui/DriverMarket.tsx` —
+see their phase entries below for what each does and why.
+
 ## What's been built (chronological, by phase)
 
 1. **Core sim, no UI** — lap time model, tire degradation, pit stops, fixed
@@ -1013,6 +1021,222 @@ src/
       `f1-manager-save-v8` directly to confirm the field round-trips.
       Zero console errors throughout, `tsc -b` clean.
 
+20. **Settings system** — after phase 19, the user asked for five more
+    tactical features (fuel strategy, setup trade-off, race engineer
+    suggestions, teammate team orders, driver market) plus a Settings screen
+    to enable/disable every optional system. This phase built the Settings
+    infrastructure first since every later phase in this batch plugs into it.
+    - New `sim/settings.ts`: `GameSettings` — one boolean per optional
+      system (damageEnabled, weatherEnabled, cautionsEnabled,
+      penaltiesEnabled, retirementsEnabled, fuelStrategyEnabled,
+      setupTradeoffEnabled, strategistSuggestionsEnabled, teamOrdersEnabled,
+      seasonObjectivesEnabled, rivalTrackerEnabled) plus two
+      career-persistence toggles (driverMarketPersists, multiSeasonCareer),
+      both **off** by default per explicit instruction — everything else
+      defaults **on** (matches the pre-existing experience).
+      `SETTING_TOGGLES`/`SETTING_GROUPS` drive the UI generically instead of
+      hand-writing each toggle row.
+    - `state/settings.ts`: localStorage persistence
+      (`f1-manager-settings-v1`), merging stored values over
+      `DEFAULT_SETTINGS` so a toggle added in a later phase still gets a
+      sane default for an old stored blob instead of `undefined`.
+    - `ui/SettingsScreen.tsx`: a modal grouping toggles into Race
+      Systems/Tactical Options/Season & Career, plus the Easy/Normal/Hard
+      difficulty control **moved here from MainMenu** (MainMenu now just has
+      a "Settings" button).
+    - `RaceState` gained a required `settings: GameSettings` field, baked in
+      once at `setupRace` — same pattern as `difficulty`, so a mid-race
+      Settings change never destabilizes a race already in progress. The
+      five pre-existing systems are gated with `state.settings.xEnabled &&`
+      checks in `simulateLap`; the newer toggles become functional as their
+      features land in the phases below. Bumped the season-save key to v9.
+21. **Fuel strategy** — a pre-race Light/Standard/Heavy fuel-load choice in
+    `RacingPlan`, gated by `fuelStrategyEnabled`.
+    - New `sim/fuel.ts`: Light gives a permanent -0.25s/lap pace bonus but a
+      whole-race fuel budget (`initialFuelRemaining`, laps × a
+      per-load multiplier — 0.85 for Light, 1.15 Standard, 1.5 Heavy) that
+      depletes every lap by a driving-mode-scaled burn rate
+      (`fuelBurnForLap` — push 1.35x, balanced 1x, conserve 0.7x). **Not**
+      replenished at pit stops — a whole-race resource, so managing it means
+      watching driving mode across the *entire* race, not just one stint.
+      Running it dry sets `CarState.fuelSaving = true` permanently for the
+      rest of the race, applying `FUEL_SAVING_PENALTY_SECONDS` (0.6s/lap) —
+      worse than Light's own bonus, so it's a real mistake to manage around,
+      not a soft inconvenience. Heavy is the inverse: +0.25s/lap, never
+      realistically runs dry.
+    - AI cars always run "standard" — fuel micromanagement stays a
+      player-facing tactical layer, matching how AI already doesn't get
+      difficulty-scaled pace or the later downforce/team-order features
+      either. `InitialStrategy` gained a required `fuelLoad` field.
+    - `CarState` gained `fuelLoad`/`fuelRemaining`/`fuelSaving` (all
+      required); `createCarState` forces `fuelLoad` to `"standard"`
+      whenever `settings.fuelStrategyEnabled` is false, regardless of what
+      the strategy object says — guards against stale "light"/"heavy" left
+      over from before the player disabled the feature. `applyPlayerPlan`
+      re-derives `fuelRemaining` from whatever load the player actually
+      confirmed in `RacingPlan` (the car was first created with a
+      placeholder strategy before that screen opens).
+    - Current load + remaining margin show in `PlayerControls`'s Strategy
+      panel; running dry logs a new `"fuel"` LapEvent type (⛽ icon).
+      Verified in-browser: a deterministic console race (Light + push the
+      whole way, 53-lap Monza) ran dry almost exactly where the arithmetic
+      predicted (lap 34 vs. a predicted ~33.4), and disabling the setting
+      confirmed the load stays "standard" and never depletes even under
+      sustained push. Bumped the season-save key to v10.
+22. **Setup trade-off (downforce)** — a pre-race Low/Balanced/High downforce
+    choice in `RacingPlan`, gated by `setupTradeoffEnabled`.
+    - New `sim/downforce.ts`: derives which way a track "leans" from its
+      *existing* `overtakingDifficulty` stat rather than adding new
+      per-track data — a twisty, hard-to-pass track (high
+      overtakingDifficulty, e.g. Monaco) rewards High downforce; a power
+      track (low overtakingDifficulty, e.g. Monza) rewards Low. Picking
+      against a track's grain costs real lap time
+      (`downforcePaceDeltaSeconds`, ±0.45s scaled by how strongly the track
+      leans); Balanced is always neutral. It's a genuine trade-off, not a
+      free lunch: Low downforce also wears tires 12% faster and High wears
+      them 10% slower (`downforceTireWearMultiplier`), so chasing a power
+      track's pace bonus with Low costs tire life across the stint.
+      `recommendedDownforceFor(track)` powers a plain-language hint on the
+      Racing Plan screen ("This track tends to reward low downforce...")
+      without exposing raw numbers.
+    - Same AI-always-"balanced" simplification as fuel load. `CarState`
+      gained a required `downforce` field, same forced-to-default-when-
+      disabled pattern as `fuelLoad`. Verified the pace math directly in
+      console for both Monza (favors Low, confirmed negative/positive
+      deltas) and Monaco (favors High, confirmed the mirrored signs).
+      Bumped the season-save key to v11.
+23. **Race engineer strategist suggestions** — a non-blocking advisory,
+    gated by `strategistSuggestionsEnabled`: a small corner toast
+    (`ui/StrategistSuggestion.tsx`) that can appear mid-race with a tactical
+    suggestion the player can accept (carries out the action directly) or
+    ignore. Deliberately does **not** pause playback or gate Play/Step like
+    the damage/weather/caution alerts — meant to feel like advice you can
+    act on or brush off while still driving, a different interaction
+    pattern from every earlier alert.
+    - New `sim/strategist.ts`: `checkStrategistSuggestion` looks for one of
+      three situations, in priority order: (1) **undercut** — the car ahead
+      is close (<3s) and on tires meaningfully older (5+ laps), the same
+      heuristic `decideAIAction` already uses on itself, just surfaced
+      instead of acted on automatically; (2) **weather** — an independent
+      short-range forecast preview (`generateWeatherForecast`, *not* the
+      race's own live rolls) shows a mismatch coming within 5 laps while the
+      current tire still matches; (3) **fuel** — Light load, not already
+      conserving, projected to run dry before the finish at the current
+      burn rate. Accepting queues a pit stop or switches driving mode
+      per whichever field the suggestion carries (`pitCompound`/
+      `drivingMode`).
+    - Lives entirely in `useRace.ts`'s React state (a `strategistSuggestion`
+      + a `lastStrategistLapRef` 6-lap cooldown so the engineer doesn't
+      radio in every lap a condition persists) — **not** part of
+      `RaceState`, so no save-schema bump was needed this phase. Detected in
+      the same post-lap `useEffect` that already handles the damage/
+      weather/caution alerts (reacting to committed state only, for the
+      same StrictMode-safety reason documented in phase 15).
+    - Verified the three trigger conditions directly against hand-built
+      `RaceState` objects in the console (undercut, weather, and fuel cases
+      all fired exactly as designed), then live-played several laps with no
+      console errors.
+24. **Teammate team orders** — a "Team Radio" panel (button in the Strategy
+    sidebar next to Revise Plan, gated by `teamOrdersEnabled`) letting the
+    player issue a standing order to their AI teammate:
+    - **Hold Position**: neither car fights the other for the rest of the
+      race — persists until canceled.
+    - **Let Me Through**: one-shot — the teammate concedes the position
+      outright the next time the player is actually running right behind
+      them, then the order clears itself.
+    - **Push to Block**: the teammate defends specifically against a chosen
+      rival (picked from whoever's currently nearest the teammate on
+      track) — the attacker has to win the overtake roll *twice in a row*
+      to get past (verified by Monte Carlo: an evenly-matched rival's pass
+      rate dropped from ~81% to ~70% under a block order — a real but not
+      absolute deterrent, weaker against a much-faster attacker since
+      squaring an already-high probability doesn't reduce it as much).
+    - All three are special cases inside `raceEngine.ts`'s existing
+      per-lap battle-resolution loop (`simulateLap`'s Phase B), keyed off
+      which two cars are in a given pairing (player/teammate, or
+      teammate/target-rival) — reuses the existing gap/pace battle math
+      instead of a separate subsystem. `RaceState` gained a required
+      `teamOrder: TeamOrder | null` field; `player`/`teammate` are resolved
+      once per lap near `activeCaution` at the top of `simulateLap`.
+      Verified in-browser (UI) and via hand-built `RaceState` console tests
+      for all three order types, including the Monte Carlo block-rate test.
+      Bumped the season-save key to v12.
+25. **Driver market** — a Driver Market screen (reachable from the main menu
+    at any time, and highlighted on the season-complete banner as the
+    natural moment to use it) where the player can swap their AI teammate
+    for any other driver on the grid — a straight trade, so the swapped-out
+    driver moves to the new driver's old team in return. Candidates show
+    their full stat line so it's an informed choice.
+    - `sim/roster.ts` gained `swapDriverTeams`/`applyTeamAssignments`/
+      `currentTeamAssignments`/`resetDriverMarket` — the swap mutates
+      `teamId` on the shared `drivers` array in place (same pattern as
+      `updateDriverProfile`), and a `defaultTeamIds` snapshot (taken at
+      module load, before any mutation) lets `resetDriverMarket` always
+      revert to the true original regardless of how many trades happened
+      since.
+    - `state/driverMarket.ts`: **always** persists the current swap to its
+      own localStorage key (`f1-manager-driver-market-v1`) — a plain page
+      reload should never quietly undo a trade, same reasoning as
+      `driverProfile.ts`. What the **Driver Market Persists** setting
+      actually controls is narrower: whether starting a *new season*
+      (Restart or Custom Season, in `App.tsx`'s
+      `resetDriverMarketIfNotPersisting`) reverts the swap and clears the
+      saved key, or leaves it alone. Off by default.
+    - No season-save schema change — lives in roster.ts's global state plus
+      its own localStorage key, entirely separate from SeasonState/
+      RaceState. Verified in-browser end to end: swapped in a driver,
+      confirmed the trade survived a page reload, then started a fresh
+      custom season and confirmed it reverted to the default teammate.
+26. **Race objectives + multi-season career** — two smaller features that
+    both touch `season.ts`'s season-creation/restart code paths, done
+    together to avoid editing the same lines twice.
+    - New `sim/objectives.ts`: a fresh objective generated every round from
+      a pool of six kinds (top-N finish, beat your teammate, no time
+      penalties, gain 3+ grid positions, ≤2 pit stops, fastest lap of the
+      race), gated by `seasonObjectivesEnabled`. Shown in `RacingPlan` and a
+      persistent sidebar section during the race; resolved on Race Results
+      with a 120-200 credit development-budget bonus on top of normal prize
+      money if achieved (folded into the same `prizeByTeam` map
+      `completeRound` already builds, so it flows through the existing
+      AI-auto-spend/player-budget pipeline unchanged). A retired player
+      fails every objective outright, no partial credit for a DNF.
+      `CarState` gained a required `startingPosition` field (grid slot from
+      qualifying) so "gain positions" has something to compare the finish
+      against. `evaluateObjective` is also called directly from `App.tsx`
+      when Race Results first opens (using `season.currentObjective`,
+      which hasn't been replaced yet at that point) rather than waiting for
+      `completeRound` — that only runs when the player clicks Next Round,
+      which would be too late to show the result on the results screen that
+      appears immediately when the race finishes.
+    - **Multi-Season Career** (its own setting, off by default): when on,
+      `restartSeason`/`startCustomSeason` pass the *current*
+      `teamDevelopment` into `createSeason`'s new `carryForwardDevelopment`
+      option instead of letting it reset to zero.
+    - `createSeason`'s growing parameter list (calendar, objectives,
+      rival — added next phase, dev carry-forward) was refactored into a
+      single options object rather than more positional params. Verified
+      the objective-evaluation boundary conditions directly (top-N/
+      gain-positions/limited-pit-stops all flip exactly at their target
+      value) against a full deterministic 53-lap console race. Bumped the
+      season-save key to v13.
+27. **Rival tracker** — a season-long rival, gated by `rivalTrackerEnabled`:
+    picked once per season (`pickRival` in `season.ts`, weighted toward
+    drivers on teams closer in `carPerformance` to the player's own team —
+    verified by 2000 simulated season starts showing the teammate and
+    similarly-performing teams picked 2-3x more often than the weakest team
+    on the grid) and fixed for that whole season — a new one is only picked
+    when a new season actually starts, never mid-season. Highlighted with a
+    "RIVAL" tag in the Drivers' championship table and shown as a live
+    "Gap to Rival" card in the race sidebar (position + time gap, or DNF).
+    `SeasonState` gained a required `rivalDriverId: string | null` field.
+    Bumped the season-save key to v14.
+
+    After phase 27, every one of the six phase-20 batch features (fuel,
+    setup trade-off, race engineer suggestions, team orders, driver market)
+    plus the two bonus features requested mid-batch (race objectives, rival
+    tracker) and the Settings screen tying them all together are complete
+    and pushed.
+
 ## A real bug that was found and fixed (worth knowing about)
 
 In `useSeason.ts`, the hook originally recomputed `getTrack(currentRoundTrackId(season)!)`
@@ -1036,10 +1260,10 @@ through the exact crash point with zero errors afterward.
   localStorage slot per browser.
 - Battle/overtake resolution is a heuristic model, not physics — tuned to
   "feel fair," not validated against real telemetry.
-- Team development/budget (phase 18) resets every season by design — no
-  multi-season career mode where upgrades persist across a restart. Was an
-  explicit scoping choice, not an oversight; would need new save-schema
-  handling for "carry forward vs. fresh start" if ever revisited.
+- Team development/budget (phase 18) resets every season by default — but
+  phase 26 added a "Multi-Season Career" setting (off by default) that
+  carries teamDevelopment forward across a restart/custom-season instead,
+  for players who want upgrades to compound over a longer arc.
 
 ## Working style notes for whoever picks this up
 
@@ -1083,3 +1307,24 @@ through the exact crash point with zero errors afterward.
   feature/change, not just locally commit. No need to ask permission each
   time for this specific repo — the user pre-authorized it in chat. Still
   never force-push or rewrite history without asking.
+- **Local dev server / Browser-pane preview environment quirk** (found phase
+  20, 2026-09-12): on this machine, Node/npm aren't on PATH for either the
+  Bash tool or the Browser pane's `preview_start` — `npx`/`npm` fail with
+  "command not found" unless invoked with the full path
+  (`/c/Program Files/nodejs/...` in Bash, or via PATH-prefixing:
+  `export PATH="/c/Program Files/nodejs:$PATH"`). `preview_start` doesn't
+  support an inline PATH override, so `.claude/launch.json`'s
+  `runtimeExecutable` points at a small wrapper, `.claude/run-dev.bat`,
+  which sets PATH and then runs `npm run dev` — don't revert this to a bare
+  `"npm"`/`"npx"` runtimeExecutable, it'll fail the same way again.
+- **Console-based verification and shared mutable module state** (phase 25):
+  the established `await import('/src/sim/<module>.ts')` console technique
+  (see the entry below) works perfectly for testing pure functions with
+  freshly-constructed state, but is unreliable for checking *global mutable
+  state* the live page's own React app already mutated (e.g. roster.ts's
+  `drivers` array after a Driver Market swap) — a raw console `import()`
+  can resolve to a different cache-busted module instance than the one the
+  running app is actually using, silently reading stale/default values.
+  Verify that kind of change by reading it back through the UI (or via a
+  fresh full page reload, which re-syncs everyone to the same instance),
+  not by importing the module fresh into the console mid-session.
