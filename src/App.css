@@ -1623,3 +1623,52 @@ h2 {
   transform: translateX(16px);
   background: var(--on-accent);
 }
+
+/* Strategist (race engineer) suggestion toast */
+
+.strategist-suggestion {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  width: 100%;
+  max-width: 320px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 0.9rem 1rem;
+  z-index: 90;
+}
+
+.strategist-suggestion__label {
+  font-family: var(--heading);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--yellow);
+  margin-bottom: 0.4rem;
+}
+
+.strategist-suggestion__message {
+  font-size: 0.85rem;
+  color: var(--text-h);
+  line-height: 140%;
+  margin: 0 0 0.75rem;
+}
+
+.strategist-suggestion__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.strategist-suggestion__accept {
+  background: var(--red);
+  border-color: var(--red);
+  color: var(--on-accent);
+}
+
+.strategist-suggestion__accept:hover {
+  background: #ff1a12;
+}

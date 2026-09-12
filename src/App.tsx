@@ -25,6 +25,7 @@ import { CautionAlert } from "./ui/CautionAlert";
 import { RacingPlan } from "./ui/RacingPlan";
 import { RevisePlan } from "./ui/RevisePlan";
 import { RaceResults } from "./ui/RaceResults";
+import { StrategistSuggestionCard } from "./ui/StrategistSuggestion";
 import { MainMenu } from "./ui/MainMenu";
 import { SettingsScreen } from "./ui/SettingsScreen";
 import { TeamDevelopment } from "./ui/TeamDevelopment";
@@ -81,6 +82,7 @@ function App() {
     damageAlert,
     weatherAlert,
     cautionAlert,
+    strategistSuggestion,
     planPending,
     setSpeed,
     play,
@@ -94,6 +96,8 @@ function App() {
     resolveDamage,
     resolveWeather,
     resolveCaution,
+    acceptStrategistSuggestion,
+    dismissStrategistSuggestion,
     confirmPlan,
   } = race;
 
@@ -309,6 +313,14 @@ function App() {
           track={track}
           onPit={() => resolveCaution("pit")}
           onPush={() => resolveCaution("push")}
+        />
+      )}
+
+      {!blocked && strategistSuggestion && (
+        <StrategistSuggestionCard
+          suggestion={strategistSuggestion}
+          onAccept={acceptStrategistSuggestion}
+          onDismiss={dismissStrategistSuggestion}
         />
       )}
 

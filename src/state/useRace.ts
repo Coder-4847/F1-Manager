@@ -10,6 +10,8 @@ import {
   simulateLap,
 } from "../sim/raceEngine";
 import { weatherMismatch } from "../sim/weather";
+import { checkStrategistSuggestion } from "../sim/strategist";
+import type { StrategistSuggestion } from "../sim/strategist";
 import type { DrivingMode, PitStopPlan, RaceState, TireCompound, Track } from "../sim/types";
 import type { InitialStrategy } from "../sim/strategy";
 import type { TeamDevelopment } from "../sim/development";
@@ -82,6 +84,13 @@ export function useRace({
   // True right after a Safety Car/VSC is freshly deployed — offers the discounted pit
   // window immediately, same pause/gate pattern as the other alerts.
   const [cautionAlert, setCautionAlert] = useState(false);
+  // A non-blocking advisory the player can accept or ignore — unlike the alerts above, it
+  // never pauses playback or gates Play/Step. See sim/strategist.ts.
+  const [strategistSuggestion, setStrategistSuggestion] = useState<StrategistSuggestion | null>(null);
+  // Laps since the last suggestion was shown — a cooldown so the race engineer doesn't
+  // radio in every single lap while a condition (e.g. a tight undercut gap) stays true.
+  const lastStrategistLapRef = useRef(0);
+  const STRATEGIST_COOLDOWN_LAPS = 6;
 
   // The highest lap number already checked for alert-worthy events. Deciding whether to
   // pop an alert lives in a useEffect (below), reacting to the *committed* raceState,
@@ -136,8 +145,18 @@ export function useRace({
       if (weatherNowMismatched) setWeatherAlert(true);
       if (seriousDamage) setDamageAlert(true);
       if (cautionJustDeployed) setCautionAlert(true);
+    } else if (
+      raceState.settings.strategistSuggestionsEnabled &&
+      !strategistSuggestion &&
+      raceState.currentLap - lastStrategistLapRef.current >= STRATEGIST_COOLDOWN_LAPS
+    ) {
+      const suggestion = checkStrategistSuggestion(raceState, playerDriverId);
+      if (suggestion) {
+        setStrategistSuggestion(suggestion);
+        lastStrategistLapRef.current = raceState.currentLap;
+      }
     }
-  }, [raceState, playerDriverId]);
+  }, [raceState, playerDriverId, strategistSuggestion]);
 
   useEffect(() => {
     if (!playing || damageAlert || weatherAlert || cautionAlert || planPending) return;
@@ -165,6 +184,8 @@ export function useRace({
       setDamageAlert(false);
       setWeatherAlert(false);
       setCautionAlert(false);
+      setStrategistSuggestion(null);
+      lastStrategistLapRef.current = 0;
       setPlanPending(true);
       lastCheckedLapRef.current = 0;
       setRaceState((prev) =>
@@ -180,6 +201,8 @@ export function useRace({
       setDamageAlert(false);
       setWeatherAlert(false);
       setCautionAlert(false);
+      setStrategistSuggestion(null);
+      lastStrategistLapRef.current = 0;
       setPlanPending(true);
       lastCheckedLapRef.current = 0;
       setRaceState(setupRace({ track, playerDriverId, playerStrategy, teamDevelopment, difficulty, settings }));
@@ -194,6 +217,8 @@ export function useRace({
     setDamageAlert(false);
     setWeatherAlert(false);
     setCautionAlert(false);
+    setStrategistSuggestion(null);
+    lastStrategistLapRef.current = state.currentLap;
     setPlanPending(false);
     // The loaded race may already be mid-race — mark everything up to its current lap as
     // already checked so we don't immediately re-alert on old, already-resolved events.
@@ -273,6 +298,25 @@ export function useRace({
     setCautionAlert(false);
   }, []);
 
+  /** Accepts the current strategist suggestion — queues a pit stop or switches driving mode
+   *  per whichever action the suggestion carries — and clears it. A plain click handler (no
+   *  randomness involved), so reading `strategistSuggestion` from render scope is safe here —
+   *  unlike the per-lap alert detection above, this isn't re-derived from a nondeterministic
+   *  simulateLap call that StrictMode could invoke twice with diverging outcomes. */
+  const acceptStrategistSuggestion = useCallback(() => {
+    if (!strategistSuggestion) return;
+    const { pitCompound, drivingMode } = strategistSuggestion;
+    setRaceState((prev) => {
+      const next = structuredClone(prev);
+      if (pitCompound) queuePlayerPitStop(next, next.currentLap + 1, pitCompound);
+      if (drivingMode) setPlayerDrivingMode(next, drivingMode);
+      return next;
+    });
+    setStrategistSuggestion(null);
+  }, [strategistSuggestion]);
+
+  const dismissStrategistSuggestion = useCallback(() => setStrategistSuggestion(null), []);
+
   /** Locks in the player's pre-race plan (starting tires, mode, pit schedule) and unblocks playback. */
   const confirmPlan = useCallback((plan: InitialStrategy) => {
     setRaceState((prev) => {
@@ -296,6 +340,7 @@ export function useRace({
     damageAlert,
     weatherAlert,
     cautionAlert,
+    strategistSuggestion,
     planPending,
     setSpeed,
     play,
@@ -311,6 +356,8 @@ export function useRace({
     resolveDamage,
     resolveWeather,
     resolveCaution,
+    acceptStrategistSuggestion,
+    dismissStrategistSuggestion,
     confirmPlan,
   };
 }
