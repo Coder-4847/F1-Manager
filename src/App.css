@@ -303,6 +303,12 @@
   font-size: 0.85rem;
 }
 
+.racing-plan__fuel-hint {
+  color: var(--text);
+  font-size: 0.78rem;
+  margin: -0.5rem 0 0.9rem;
+}
+
 .season-setup__rounds {
   display: flex;
   flex-direction: column;

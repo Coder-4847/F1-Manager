@@ -1,4 +1,4 @@
-import type { CarState, CautionPeriod, Driver, DrivingMode, LapEvent, PitStopPlan, RaceState, TireCompound, Track } from "./types";
+import type { CarState, CautionPeriod, Driver, DrivingMode, FuelLoad, LapEvent, PitStopPlan, RaceState, TireCompound, Track } from "./types";
 import type { AIDecisionContext, InitialStrategy } from "./strategy";
 import { calculateLapTime } from "./lapTime";
 import { pitStopTimeLoss } from "./pitStop";
@@ -22,6 +22,7 @@ import { AI_SPEED_MULTIPLIER } from "./difficulty";
 import type { Difficulty } from "./difficulty";
 import { DEFAULT_SETTINGS } from "./settings";
 import type { GameSettings } from "./settings";
+import { fuelBurnForLap, initialFuelRemaining } from "./fuel";
 import { drivers, getTeam } from "./roster";
 
 export interface RaceSetup {
@@ -50,7 +51,18 @@ function developedTeam(teamId: string, development?: TeamDevelopment) {
   return { ...base, carPerformance: base.carPerformance + paceBonusForLevel(development.paceLevel) };
 }
 
-function createCarState(driver: Driver, isPlayer: boolean, strategy: InitialStrategy, development?: TeamDevelopment): CarState {
+function createCarState(
+  driver: Driver,
+  isPlayer: boolean,
+  strategy: InitialStrategy,
+  totalLaps: number,
+  settings: GameSettings,
+  development?: TeamDevelopment
+): CarState {
+  // Forced to "standard" (a no-op load) when the setting is off, rather than trusting
+  // whatever the strategy object happens to carry — guards against a stale "light"/"heavy"
+  // choice left over from before the player disabled the feature.
+  const fuelLoad: FuelLoad = settings.fuelStrategyEnabled ? strategy.fuelLoad : "standard";
   return {
     driver,
     team: developedTeam(driver.teamId, development),
@@ -68,6 +80,9 @@ function createCarState(driver: Driver, isPlayer: boolean, strategy: InitialStra
     penaltySeconds: 0,
     reliabilityMultiplier: development ? reliabilityMultiplierForLevel(development.reliabilityLevel) : 1,
     tireWearMultiplier: development ? tireWearMultiplierForLevel(development.tireManagementLevel) : 1,
+    fuelLoad,
+    fuelRemaining: initialFuelRemaining(fuelLoad, totalLaps),
+    fuelSaving: false,
   };
 }
 
@@ -90,12 +105,13 @@ function runQualifying(random: () => number, teamDevelopment?: Record<string, Te
 
 export function setupRace(setup: RaceSetup): RaceState {
   const random = setup.random ?? Math.random;
+  const settings = setup.settings ?? DEFAULT_SETTINGS;
   const gridOrder = runQualifying(random, setup.teamDevelopment);
   const cars: CarState[] = drivers.map((driver) => {
     const isPlayer = driver.id === setup.playerDriverId;
     const strategy = isPlayer ? setup.playerStrategy : generateAIStrategy(driver, setup.track, random);
     const development = setup.teamDevelopment?.[driver.teamId];
-    const car = createCarState(driver, isPlayer, strategy, development);
+    const car = createCarState(driver, isPlayer, strategy, setup.track.totalLaps, settings, development);
     // A tiny, race-irrelevant time offset by grid slot — just enough to break the lap-0
     // "everyone's at 0.0s" tie in qualifying order instead of arbitrary roster order.
     car.totalTimeSeconds = gridOrder.indexOf(driver.id) * 0.001;
@@ -111,7 +127,7 @@ export function setupRace(setup: RaceSetup): RaceState {
     weather: "dry",
     caution: null,
     difficulty: setup.difficulty ?? "normal",
-    settings: setup.settings ?? DEFAULT_SETTINGS,
+    settings,
   };
 }
 
@@ -254,6 +270,21 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
 
     const duePitStop: PitStopPlan | undefined =
       car.pitPlan[0]?.lap === state.currentLap ? car.pitPlan.shift() : undefined;
+
+    // Not replenished at pit stops — a whole-race budget, so running it dry is a lasting
+    // consequence of driving-mode choices made across the whole race, not just this stint.
+    if (state.settings.fuelStrategyEnabled) {
+      car.fuelRemaining -= fuelBurnForLap(car.drivingMode);
+      if (car.fuelRemaining <= 0 && !car.fuelSaving) {
+        car.fuelSaving = true;
+        lapEvents.push({
+          type: "fuel",
+          lap: state.currentLap,
+          driverId: car.driver.id,
+          message: `${car.driver.name} runs the fuel margin dry — forced into a fuel-saving lift-and-coast!`,
+        });
+      }
+    }
 
     const lapTimeMultiplier = activeCaution ? cautionLapTimeMultiplier(activeCaution.type) : 1;
     // Difficulty scales AI pace only — a speed multiplier above 1 means faster, so it
@@ -409,6 +440,11 @@ export function applyPlayerPlan(state: RaceState, plan: InitialStrategy): void {
   car.currentCompound = plan.startingCompound;
   car.drivingMode = plan.drivingMode;
   car.pitPlan = [...plan.pitPlan].sort((a, b) => a.lap - b.lap);
+  // Re-derive the fuel budget from whatever load the player actually confirmed — the car
+  // was first created with a placeholder strategy before the Racing Plan screen opened.
+  car.fuelLoad = plan.fuelLoad;
+  car.fuelRemaining = initialFuelRemaining(plan.fuelLoad, state.track.totalLaps);
+  car.fuelSaving = false;
 }
 
 /** Changes the player car's driving mode with immediate effect from the next simulated lap. */

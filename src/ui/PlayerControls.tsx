@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { CarState, DrivingMode, TireCompound } from "../sim/types";
+import { FUEL_LOAD_LABEL } from "../sim/fuel";
 import { TireBadge } from "./TireBadge";
 import { CarHealthIndicator } from "./CarHealthIndicator";
 
@@ -20,6 +21,7 @@ export interface PlayerControlsProps {
   onQueuePitStop: (lap: number, compound: TireCompound) => void;
   onCancelPitStop: () => void;
   onOpenRevisePlan: () => void;
+  fuelStrategyEnabled: boolean;
 }
 
 export function PlayerControls({
@@ -29,6 +31,7 @@ export function PlayerControls({
   onQueuePitStop,
   onCancelPitStop,
   onOpenRevisePlan,
+  fuelStrategyEnabled,
 }: PlayerControlsProps) {
   const [selectedCompound, setSelectedCompound] = useState<TireCompound>("medium");
   const pendingStop = car.pitPlan[0];
@@ -55,6 +58,16 @@ export function PlayerControls({
           <div className="player-controls__label">Damage</div>
           <div className={`damage-status damage-status--${car.damageSeverity}`}>
             {car.damageDescription ?? car.damageLabel} &middot; -{car.damagePenaltySeconds.toFixed(1)}s/lap
+          </div>
+        </div>
+      )}
+
+      {fuelStrategyEnabled && (
+        <div className="player-controls__row">
+          <div className="player-controls__label">Fuel</div>
+          <div className={car.fuelSaving ? "damage-status damage-status--major" : "car-condition__ok"}>
+            {FUEL_LOAD_LABEL[car.fuelLoad]} load
+            {car.fuelSaving ? " — fuel saving!" : ` · ${Math.max(0, Math.round(car.fuelRemaining))} laps' margin left`}
           </div>
         </div>
       )}

@@ -8,6 +8,14 @@ export type TireCompound = "soft" | "medium" | "hard" | "intermediate" | "wet";
 
 export type DrivingMode = "push" | "balanced" | "conserve";
 
+/** Pre-race fuel load choice — light is quicker but carries a real risk of running the
+ *  margin dry late in the race; heavy is always safe but permanently slower. See fuel.ts. */
+export type FuelLoad = "light" | "standard" | "heavy";
+
+/** Pre-race downforce setup choice — a pace/tire-wear trade-off suited to the track's
+ *  character (power tracks favor low, twisty tracks favor high). See setup.ts. */
+export type DownforceSetting = "low" | "balanced" | "high";
+
 /** dry = normal grip; damp = light rain/drying track, suits intermediates; wet = heavy rain, suits full wets. */
 export type WeatherCondition = "dry" | "damp" | "wet";
 
@@ -133,10 +141,19 @@ export interface CarState {
   /** Multiplies tire wear penalty — 1 = no team development, lower = a team's tire
    *  management upgrades. Baked in once at car creation from that round's TeamDevelopment. */
   tireWearMultiplier: number;
+  /** Chosen pre-race (or forced to "standard" when the Fuel Strategy setting is off) — a
+   *  fixed pace delta for the whole race, see FUEL_LOAD_PACE_DELTA in fuel.ts. */
+  fuelLoad: FuelLoad;
+  /** Fuel units left in this race's budget — depletes every lap by a driving-mode-scaled
+   *  burn rate. Not replenished at pit stops; this is a whole-race resource, not per-stint. */
+  fuelRemaining: number;
+  /** true once fuelRemaining has run out — applies a lap-time penalty for the rest of the
+   *  race (see FUEL_SAVING_PENALTY_SECONDS). Never un-sets once triggered. */
+  fuelSaving: boolean;
 }
 
 export interface LapEvent {
-  type: "pit-stop" | "overtake" | "damage" | "weather" | "penalty" | "retirement" | "caution";
+  type: "pit-stop" | "overtake" | "damage" | "weather" | "penalty" | "retirement" | "caution" | "fuel";
   lap: number;
   /** Empty for race-wide events (weather, caution) that aren't tied to one car. */
   driverId: string;

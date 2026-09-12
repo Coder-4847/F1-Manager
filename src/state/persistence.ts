@@ -1,9 +1,9 @@
 import type { RaceState } from "../sim/types";
 import type { SeasonState } from "../sim/season";
 
-// Bumped to v9: RaceState gained the required settings field — an old save's missing
-// field would be undefined, and every settings.xEnabled check in simulateLap would throw.
-const SAVE_KEY = "f1-manager-save-v9";
+// Bumped to v10: CarState gained the required fuelLoad/fuelRemaining/fuelSaving fields —
+// an old save's missing fuelLoad would break FUEL_LOAD_PACE_DELTA[undefined] (NaN lap times).
+const SAVE_KEY = "f1-manager-save-v10";
 
 export interface SeasonSave {
   season: SeasonState;

@@ -42,6 +42,7 @@ const PLAYER_STRATEGY: InitialStrategy = {
   startingCompound: "medium",
   drivingMode: "balanced",
   pitPlan: [{ lap: 27, compound: "hard" }],
+  fuelLoad: "standard",
 };
 
 // Runs once at module load, before useSeason's lazy initializer builds the first
@@ -269,10 +270,12 @@ function App() {
             startingCompound: playerCar.currentCompound,
             drivingMode: playerCar.drivingMode,
             pitPlan: playerCar.pitPlan,
+            fuelLoad: playerCar.fuelLoad,
           }}
           onStart={confirmPlan}
           hasSave={hasSave}
           onLoad={loadProgress}
+          fuelStrategyEnabled={settings.fuelStrategyEnabled}
         />
       )}
 
@@ -417,6 +420,7 @@ function App() {
                 onQueuePitStop={queuePitStop}
                 onCancelPitStop={cancelPitStop}
                 onOpenRevisePlan={handleOpenRevisePlan}
+                fuelStrategyEnabled={settings.fuelStrategyEnabled}
               />
             </section>
           )}

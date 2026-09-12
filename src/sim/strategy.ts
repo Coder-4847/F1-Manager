@@ -1,4 +1,4 @@
-import type { CarState, CautionType, Driver, DrivingMode, PitStopPlan, TireCompound, Track, WeatherCondition } from "./types";
+import type { CarState, CautionType, Driver, DrivingMode, FuelLoad, PitStopPlan, TireCompound, Track, WeatherCondition } from "./types";
 import { tireWearPercent } from "./tires";
 import { weatherMismatch } from "./weather";
 
@@ -7,6 +7,9 @@ export interface InitialStrategy {
   /** Pre-set pit stops queued before the race starts. AI cars start with none — Phase 3 decides pit calls reactively, lap by lap. The player can still pre-queue one via the UI. */
   pitPlan: PitStopPlan[];
   drivingMode: DrivingMode;
+  /** AI cars always run "standard" — fuel micromanagement is a player-facing tactical layer,
+   *  not something the reactive AI strategy models. */
+  fuelLoad: FuelLoad;
 }
 
 /**
@@ -18,7 +21,7 @@ export function generateAIStrategy(driver: Driver, _track: Track, random: () => 
   const startingCompound: TireCompound = aggressive ? "soft" : random() < 0.5 ? "medium" : "soft";
   const drivingMode: DrivingMode = aggressive ? "push" : random() < 0.3 ? "conserve" : "balanced";
 
-  return { startingCompound, pitPlan: [], drivingMode };
+  return { startingCompound, pitPlan: [], drivingMode, fuelLoad: "standard" };
 }
 
 export interface AIDecisionContext {

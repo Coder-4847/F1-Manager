@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "f1-manager-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "C:\\Programming\\Visual Studio Code\\F1 Manager\\.claude\\run-dev.bat",
+      "runtimeArgs": [],
       "port": 5173
     }
   ]

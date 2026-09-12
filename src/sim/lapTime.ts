@@ -1,6 +1,7 @@
 import type { CarState, DrivingMode, Track, WeatherCondition } from "./types";
 import { tireCompounds, tireWearPenalty } from "./tires";
 import { tireWeatherPenaltySeconds, weatherBaseLapPenaltySeconds, weatherLevel } from "./weather";
+import { FUEL_LOAD_PACE_DELTA, FUEL_SAVING_PENALTY_SECONDS } from "./fuel";
 
 const REFERENCE_PACE = 85;
 const PACE_SCALE_SECONDS_PER_POINT = 0.08;
@@ -51,6 +52,8 @@ export function calculateLapTime(
 
   const modeDelta = DRIVING_MODE_PACE_DELTA[car.drivingMode];
   const weatherPenalty = weatherBaseLapPenaltySeconds(weather);
+  const fuelLoadDelta = FUEL_LOAD_PACE_DELTA[car.fuelLoad];
+  const fuelSavingPenalty = car.fuelSaving ? FUEL_SAVING_PENALTY_SECONDS : 0;
 
   // Consistency reduces random noise: 100 consistency -> ~0 noise, 0 -> full noise.
   // Wetter conditions amplify that noise further — everyone's a bit scrappier in the rain.
@@ -66,6 +69,8 @@ export function calculateLapTime(
     fuelPenalty +
     modeDelta +
     weatherPenalty +
+    fuelLoadDelta +
+    fuelSavingPenalty +
     noise +
     car.damagePenaltySeconds;
 

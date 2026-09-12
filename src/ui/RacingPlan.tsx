@@ -1,7 +1,8 @@
 import { useState } from "react";
-import type { DrivingMode, PitStopPlan, TireCompound, WeatherCondition } from "../sim/types";
+import type { DrivingMode, FuelLoad, PitStopPlan, TireCompound, WeatherCondition } from "../sim/types";
 import type { InitialStrategy } from "../sim/strategy";
 import { generateWeatherForecast } from "../sim/weather";
+import { FUEL_LOADS, FUEL_LOAD_LABEL } from "../sim/fuel";
 import { WeatherForecast } from "./WeatherForecast";
 
 const COMPOUNDS: TireCompound[] = ["soft", "medium", "hard", "intermediate", "wet"];
@@ -25,6 +26,9 @@ export interface RacingPlanProps {
   /** When set, a saved game exists — offer a way out of planning a race that's about to be replaced by it. */
   hasSave?: boolean;
   onLoad?: () => void;
+  /** Hides the fuel load picker entirely when the Settings toggle is off — the plan is then
+   *  submitted with initialPlan.fuelLoad unchanged (already forced to "standard"). */
+  fuelStrategyEnabled: boolean;
 }
 
 export function RacingPlan({
@@ -36,9 +40,11 @@ export function RacingPlan({
   onStart,
   hasSave,
   onLoad,
+  fuelStrategyEnabled,
 }: RacingPlanProps) {
   const [compound, setCompound] = useState<TireCompound>(initialPlan.startingCompound);
   const [mode, setMode] = useState<DrivingMode>(initialPlan.drivingMode);
+  const [fuelLoad, setFuelLoad] = useState<FuelLoad>(initialPlan.fuelLoad);
   // Generated once when the screen opens — a preview, not a guarantee (see generateWeatherForecast).
   const [forecast] = useState(() => generateWeatherForecast(startWeather, totalLaps));
   // Clamp the incoming default (e.g. the app's placeholder plan) to this specific race's
@@ -70,6 +76,7 @@ export function RacingPlan({
       startingCompound: compound,
       drivingMode: mode,
       pitPlan: [...pitPlan].sort((a, b) => a.lap - b.lap),
+      fuelLoad: fuelStrategyEnabled ? fuelLoad : "standard",
     });
   };
 
@@ -124,7 +131,32 @@ export function RacingPlan({
               ))}
             </div>
           </div>
+
+          {fuelStrategyEnabled && (
+            <div className="driver-profile__field">
+              <label>Fuel Load</label>
+              <div className="segmented">
+                {FUEL_LOADS.map((load) => (
+                  <button
+                    key={load}
+                    type="button"
+                    className={load === fuelLoad ? "segmented__btn segmented__btn--active" : "segmented__btn"}
+                    onClick={() => setFuelLoad(load)}
+                  >
+                    {FUEL_LOAD_LABEL[load]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
+
+        {fuelStrategyEnabled && (
+          <p className="racing-plan__fuel-hint">
+            Light is quicker but can run dry late in the race if you push too much — Heavy is always safe but
+            permanently slower.
+          </p>
+        )}
 
         <div className="racing-plan__stops">
           <div className="racing-plan__stops-header">

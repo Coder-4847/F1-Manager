@@ -8,6 +8,7 @@ const ICON: Record<LapEvent["type"], string> = {
   penalty: "🚩",
   retirement: "🏳",
   caution: "🚧",
+  fuel: "⛽",
 };
 
 export function EventFeed({ events }: { events: LapEvent[] }) {
