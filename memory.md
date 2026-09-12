@@ -57,13 +57,19 @@ Opens at `http://localhost:5173`. `npm run build` produces the static
 
 ## Architecture
 
+Current as of phase 16 (2026-09-12) — kept in sync with `src/` on every phase;
+if this ever drifts, `find src -type f | sort` is the source of truth.
+
 ```
 src/
   sim/            Pure TS, zero React deps — the simulation engine.
-    types.ts        Core domain types: TireCompound, DrivingMode, Driver,
-                     Team, Track, CarState, RaceState, LapEvent, etc.
+    types.ts        Core domain types: TireCompound (now incl. intermediate/
+                     wet), DrivingMode, WeatherCondition, DamageSeverity,
+                     Driver, Team, Track, CarState, RaceState, LapEvent, etc.
     roster.ts        8 fictional teams x 2 drivers (16 total), each with
-                      pace/tireManagement/consistency/aggression stats.
+                      pace/tireManagement/consistency/aggression stats, plus
+                      updateDriverProfile()/getDefaultProfile() for the
+                      player's editable name/age/nationality/number (phase 11).
     tracks.ts         12 real-world circuits with per-track lap length, lap
                       count, pit loss, tire wear factor, overtaking difficulty.
     trackPaths.ts     Stylized closed-loop SVG path per track for the live
@@ -71,41 +77,110 @@ src/
                       recognizable character; the rest procedurally
                       generated via a seeded PRNG + Catmull-Rom spline).
                       NOT GPS-accurate — deliberately stylized.
-    tires.ts          Compound pace/degradation curves + a UI-only wear%
-                      helper (doesn't affect lap-time math).
+    tires.ts          Compound pace/degradation curves (soft/medium/hard/
+                      intermediate/wet) + a UI-only wear% helper (doesn't
+                      affect lap-time math).
+    weather.ts        WeatherCondition transitions (rollForWeatherChange),
+                      tire/weather mismatch scoring, lap-time and damage-risk
+                      penalties from wrong-tire-for-conditions, and
+                      generateWeatherForecast() — a standalone preview (not
+                      a guarantee) used by the UI, independent of the race's
+                      own live rolls. Phase 14.
+    damage.ts         rollForDamage/applyDamage/clearDamage — per-lap chance
+                      of minor/major/mechanical damage with a flat per-lap
+                      time penalty and a repair cost paid on the next pit
+                      stop, plus a narrative description per cause. Phase 13,
+                      extended in 14 (weather risk) and 15 (description).
+    penalties.ts      rollForPenalty — small per-lap chance of a flat 5-10s
+                      time penalty, dominated by driving mode (push carries
+                      ~7x conserve's risk). Phase 15.
+    retirement.ts     rollForRetirement — extremely rare per-lap DNF chance
+                      built from three additive risk factors (active damage,
+                      tire/weather mismatch, push mode). Phase 15.
     lapTime.ts        Per-lap time = base pace + tire wear + fuel burn-off +
-                      driving-mode delta + randomness (scaled by consistency).
+                      driving-mode delta + weather penalty + randomness
+                      (scaled by consistency and conditions) + active damage.
     pitStop.ts        Pit stop time-loss model.
     strategy.ts       AI: generateAIStrategy (starting compound/mode only,
                       decided pre-race) + decideAIAction (reactive per-lap
                       pit/mode decisions based on tire wear, gaps to cars
-                      ahead/behind, and driver personality stats).
+                      ahead/behind, damage, weather mismatch, and driver
+                      personality stats) — includes a gambleChance so cars
+                      don't all react to urgent situations in lockstep.
     overtaking.ts     resolveOvertakeAttempt — probabilistic pass resolution
                       weighing pace delta, tire wear difference, aggression
                       vs. consistency, and track overtaking difficulty.
-    raceEngine.ts     Orchestrates one lap (simulateLap): reactive AI calls,
-                      lap time, pit stops, battle resolution (cars within
-                      0.8s of the car ahead fight for the position instead of
-                      passing for free), standings. setupRace/getStandings
-                      live here too.
-    season.ts         Season calendar, per-round results, cumulative
-                      driver/constructor points (classic 25-18-15-...-1).
+    raceEngine.ts     setupRace (incl. runQualifying() grid order, phase 16)
+                      + simulateLap: weather roll, per-car damage/retirement/
+                      penalty rolls, reactive AI calls, lap time, pit stops,
+                      battle resolution (cars within 0.8s of the car ahead
+                      fight for the position instead of passing for free).
+                      getStandings (DNFs ranked below classified cars) and
+                      getFinalResults (+ best lap) live here too.
+    season.ts         Season calendar (SeasonRound[] — trackId + custom laps,
+                      phase 12), per-round results, cumulative driver/
+                      constructor points (classic 25-18-15-...-1, 0 for DNFs).
 
   state/          React-facing hooks wrapping the sim.
     useRace.ts        Owns one race's live state: play/pause/step/speed,
-                      player driving-mode/pit-stop controls, track
-                      switching. Playback speed is real seconds-per-lap
-                      (1x ≈ 5s/lap; 0.5x/2x/4x scale from that).
+                      player driving-mode/pit-stop controls, track switching,
+                      planPending/damageAlert/weatherAlert gating. Playback
+                      speed is real seconds-per-lap (1x ≈ 5s/lap; 0.5x/2x/4x
+                      scale from that). Every setRaceState updater
+                      structuredClone()s `prev` before mutating — see the
+                      StrictMode bugs in phase 15's entry below; don't remove
+                      this. Alert detection lives in a useEffect reacting to
+                      committed state, not inside the updater — same reason.
     useSeason.ts      Wraps useRace: advances to the next round's track when
                       a race finishes, tracks season points, restart/season-
-                      complete, save/load. NOTE: computes the *initial*
-                      track id via a lazy useState — see "bug found" below.
+                      complete/custom-season, save/load. NOTE: computes the
+                      *initial* track via a lazy useState — see "bug found"
+                      below.
+    driverProfile.ts  localStorage persistence for the player's edited
+                      name/age/nationality/number, separate from the season
+                      save (key `f1-manager-driver-profile-v1`). Phase 11.
     persistence.ts    localStorage save/load of the whole season
-                      ({season, raceState} as one JSON blob, key
-                      "f1-manager-save-v2").
+                      ({season, raceState} as one JSON blob). Key is
+                      currently `f1-manager-save-v5` — bumped each time
+                      CarState/RaceState gains a field an old save wouldn't
+                      have (v3: custom-season calendar shape; v4: weather +
+                      damage fields; v5: penaltySeconds/retired/
+                      damageDescription). Bump again next time the schema
+                      changes.
 
   ui/             Presentational components, one concern each.
-    Leaderboard.tsx     Framer Motion `layout`-animated rows; pit-stop flash.
+    MainMenu.tsx        Full-screen title menu (Play/Resume, Custom Season,
+                      Edit Driver, Load Saved Game) — the app opens here.
+                      Phase 16.
+    DriverProfile.tsx   "Edit Driver" modal — name/age/nationality/number.
+                      Phase 11.
+    SeasonSetup.tsx     "Custom Season" modal — build a calendar from any of
+                      the 12 tracks, any order, any lap count. Phase 12.
+    RacingPlan.tsx      Pre-race blocking modal — starting tires, driving
+                      mode, multi-stop pit plan, whole-race weather forecast,
+                      qualifying position. Phase 14, forecast/grid in 15/16.
+    RevisePlan.tsx      Mid-race, non-blocking — edit the remaining pit plan
+                      against a freshly regenerated forecast. Phase 15.
+    WeatherAlert.tsx    Blocking popup on a weather change that actually
+                      invalidates the player's current tire — compound
+                      picker, remaining-race forecast, pit-now/push-through.
+                      Phase 14, gating tightened in 15.
+    DamageAlert.tsx     Blocking popup for major/mechanical damage — car
+                      health icon, damage name + narrative description,
+                      per-lap cost, pit-for-repairs/push-through. Phase 13,
+                      description in 15, visual icon in 16.
+    CarHealthIndicator.tsx  Small schematic top-down car SVG that recolors
+                      green/orange/red with damage severity. Phase 16.
+    RaceResults.tsx     Auto-opens when a race finishes — final
+                      classification, DNFs, best lap, total time, penalties.
+                      Phase 15.
+    WeatherForecast.tsx Shared colored-strip + legend component consuming a
+                      forecast array — used by RacingPlan, WeatherAlert,
+                      RevisePlan, and the always-visible sidebar forecast in
+                      App.tsx. Phase 15/16.
+    Leaderboard.tsx     Framer Motion `layout`-animated rows; pit-stop flash;
+                      damage ⚠ badge; DNF rows dimmed and gap-column shows
+                      "DNF".
     LiveTrackView.tsx   SVG track outline + car dots positioned continuously
                       via getPointAtLength, driven by a requestAnimationFrame
                       loop. Each car's on-track fraction = an animation
@@ -114,15 +189,25 @@ src/
                       average lap time) — so the pack visually bunches/
                       spreads exactly like the real gaps, not just at lap
                       boundaries.
-    PlaybackControls.tsx  Play/Pause/Step/Reset/Speed/Save/Load/Next-Round.
-    PlayerControls.tsx    Driving-mode + pit-stop queue for the player's car.
-    EventFeed.tsx          Pit-stop and overtake event log.
+    PlaybackControls.tsx  Play/Pause/Step/Reset/Speed/Save/Load/Next-Round;
+                      `blocked` prop disables Play/Step while any modal gate
+                      (plan/damage/weather) is active.
+    PlayerControls.tsx    Car condition indicator, tires, damage/penalty
+                      status, driving-mode + pit-stop queue, "Revise Plan"
+                      button.
+    EventFeed.tsx          Pit-stop, overtake, damage, weather, penalty, and
+                      retirement event log (one icon each).
     SeasonStandings.tsx    Drivers' + Constructors' championship tables,
                       podium-tinted top 3.
-    TireBadge.tsx          Compound chip + wear bar (red/yellow/white,
-                      matching the F1 palette by coincidence-turned-design).
+    TireBadge.tsx          Compound chip + wear bar for all 5 compounds
+                      (green intermediate / blue wet added phase 14).
 
-  App.tsx         Composes useSeason + all UI. PLAYER_DRIVER_ID = "k-1"
+  App.tsx         Top-level: `showMenu` gates MainMenu vs. the game view (the
+                  game view still mounts useSeason/useRace underneath either
+                  way, so Play/Resume is instant). Composes useSeason + all
+                  UI, including the always-visible sidebar weather-forecast
+                  panel (useMemo'd per lap) and the season/damage/weather/
+                  plan/revise/results modals. PLAYER_DRIVER_ID = "k-1"
                   (Ravi Chandran, Kestrel GP) and PLAYER_STRATEGY are
                   hardcoded constants near the top — change here to play as
                   a different driver.
