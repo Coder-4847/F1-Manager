@@ -164,6 +164,9 @@ export interface CarState {
   /** Chosen pre-race (or forced to "balanced" when the Setup Trade-off setting is off) —
    *  fixed for the whole race, see downforce.ts. */
   downforce: DownforceSetting;
+  /** Grid position from qualifying (1 = pole), fixed for the whole race — used by the
+   *  "gain positions" race objective (see objectives.ts) to compare against the finish. */
+  startingPosition: number;
 }
 
 export interface LapEvent {

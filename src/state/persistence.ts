@@ -1,9 +1,11 @@
 import type { RaceState } from "../sim/types";
 import type { SeasonState } from "../sim/season";
 
-// Bumped to v12: RaceState gained the required teamOrder field — an old save's missing
-// value would break the battle-resolution team-order checks in simulateLap.
-const SAVE_KEY = "f1-manager-save-v12";
+// Bumped to v13: CarState gained the required startingPosition field (used by the "gain
+// positions" race objective) and SeasonState gained the required currentObjective field —
+// an old save missing either would break objectives.ts's evaluateObjective/generateObjective
+// call sites.
+const SAVE_KEY = "f1-manager-save-v13";
 
 export interface SeasonSave {
   season: SeasonState;

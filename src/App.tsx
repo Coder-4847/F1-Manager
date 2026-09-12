@@ -14,6 +14,7 @@ import type { DriverProfileEdit } from "./sim/roster";
 import { getFinalResults } from "./sim/raceEngine";
 import { generateWeatherForecast } from "./sim/weather";
 import { recommendedDownforceFor } from "./sim/downforce";
+import { evaluateObjective } from "./sim/objectives";
 import { useSeason } from "./state/useSeason";
 import { applyStoredDriverProfile, saveDriverProfile } from "./state/driverProfile";
 import { clearDriverMarketSwap, loadDriverMarketSwap, saveDriverMarketSwap } from "./state/driverMarket";
@@ -361,6 +362,7 @@ function App() {
           fuelStrategyEnabled={settings.fuelStrategyEnabled}
           setupTradeoffEnabled={settings.setupTradeoffEnabled}
           downforceHint={recommendedDownforceFor(track)}
+          objective={season.currentObjective}
         />
       )}
 
@@ -429,6 +431,11 @@ function App() {
         <RaceResults
           trackName={track.name}
           results={getFinalResults(raceState)}
+          objectiveResult={
+            season.currentObjective
+              ? { objective: season.currentObjective, achieved: evaluateObjective(season.currentObjective, standings) }
+              : null
+          }
           onClose={() => setShowRaceResults(false)}
           onManageDevelopment={() => setShowTeamDevelopment(true)}
         />
@@ -516,6 +523,16 @@ function App() {
         </section>
 
         <aside className="layout__side">
+          {season.currentObjective && (
+            <section>
+              <h2>Objective</h2>
+              <div className="racing-plan__objective">
+                🎯 {season.currentObjective.description}{" "}
+                <span className="racing-plan__objective-reward">+{season.currentObjective.rewardCredits} credits</span>
+              </div>
+            </section>
+          )}
+
           <section>
             <h2>Weather Forecast</h2>
             {liveForecast.length > 0 ? (

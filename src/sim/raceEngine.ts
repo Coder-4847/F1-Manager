@@ -85,6 +85,7 @@ function createCarState(
     fuelRemaining: initialFuelRemaining(fuelLoad, totalLaps),
     fuelSaving: false,
     downforce,
+    startingPosition: 0, // placeholder — setupRace fills this in once the grid order is known
   };
 }
 
@@ -117,6 +118,7 @@ export function setupRace(setup: RaceSetup): RaceState {
     // A tiny, race-irrelevant time offset by grid slot — just enough to break the lap-0
     // "everyone's at 0.0s" tie in qualifying order instead of arbitrary roster order.
     car.totalTimeSeconds = gridOrder.indexOf(driver.id) * 0.001;
+    car.startingPosition = gridOrder.indexOf(driver.id) + 1;
     return car;
   });
 

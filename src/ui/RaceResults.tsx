@@ -1,4 +1,5 @@
 import type { FinalResultRow } from "../sim/raceEngine";
+import type { Objective } from "../sim/objectives";
 
 function formatDuration(totalSeconds: number): string {
   const s = Math.max(0, totalSeconds);
@@ -12,11 +13,13 @@ function formatDuration(totalSeconds: number): string {
 export interface RaceResultsProps {
   trackName: string;
   results: FinalResultRow[];
+  /** null when the Race Objectives setting was off for this race. */
+  objectiveResult: { objective: Objective; achieved: boolean } | null;
   onClose: () => void;
   onManageDevelopment: () => void;
 }
 
-export function RaceResults({ trackName, results, onClose, onManageDevelopment }: RaceResultsProps) {
+export function RaceResults({ trackName, results, objectiveResult, onClose, onManageDevelopment }: RaceResultsProps) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal modal--wide race-results" onClick={(e) => e.stopPropagation()}>
@@ -27,6 +30,19 @@ export function RaceResults({ trackName, results, onClose, onManageDevelopment }
           </button>
         </div>
         <p className="racing-plan__track">{trackName} &middot; Final Classification</p>
+
+        {objectiveResult && (
+          <div className={`racing-plan__objective${objectiveResult.achieved ? " racing-plan__objective--achieved" : ""}`}>
+            🎯 {objectiveResult.objective.description}{" "}
+            {objectiveResult.achieved ? (
+              <span className="racing-plan__objective-reward">
+                Achieved! +{objectiveResult.objective.rewardCredits} credits
+              </span>
+            ) : (
+              <span>Not achieved.</span>
+            )}
+          </div>
+        )}
 
         <div className="race-results__table" role="table">
           <div className="race-results__row race-results__row--head" role="row">

@@ -309,6 +309,26 @@
   margin: -0.5rem 0 0.9rem;
 }
 
+.racing-plan__objective {
+  font-family: var(--heading);
+  font-size: 0.85rem;
+  color: var(--text-h);
+  background: var(--panel-bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 0.55rem 0.85rem;
+  margin-bottom: 0.9rem;
+}
+
+.racing-plan__objective-reward {
+  color: var(--yellow);
+  font-weight: 700;
+}
+
+.racing-plan__objective--achieved {
+  border-color: var(--wear-low);
+}
+
 .season-setup__rounds {
   display: flex;
   flex-direction: column;

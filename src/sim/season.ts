@@ -4,6 +4,8 @@ import { getTrack, tracks } from "./tracks";
 import type { Track } from "./types";
 import { aiAutoSpend, createInitialDevelopment, purchaseUpgrade } from "./development";
 import type { TeamDevelopment, UpgradeCategory } from "./development";
+import { evaluateObjective, generateObjective } from "./objectives";
+import type { Objective } from "./objectives";
 
 const POINTS_TABLE = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 
@@ -40,21 +42,37 @@ export interface SeasonState {
   driverPoints: Record<string, number>;
   results: RoundResult[];
   /** Per-team budget + upgrade levels, keyed by team id. Resets with every new/restarted
-   *  season — see completeRound for how it grows and development.ts for what it does. */
+   *  season by default — see completeRound for how it grows, development.ts for what it
+   *  does, and the carryForwardDevelopment param below for the Multi-Season Career setting. */
   teamDevelopment: Record<string, TeamDevelopment>;
+  /** The active objective for the round about to be (or currently being) raced, or null
+   *  when the Race Objectives setting is off. Regenerated fresh every round in
+   *  completeRound — see objectives.ts. */
+  currentObjective: Objective | null;
 }
 
 export function defaultCalendar(): SeasonRound[] {
   return tracks.map((t) => ({ trackId: t.id, laps: t.totalLaps }));
 }
 
-export function createSeason(calendar: SeasonRound[] = defaultCalendar()): SeasonState {
+/**
+ * @param objectivesEnabled Defaults true for standalone/test callers; useSeason passes the
+ *   live Race Objectives setting.
+ * @param carryForwardDevelopment When provided (the Multi-Season Career setting is on),
+ *   the new season starts with this development instead of resetting to zero.
+ */
+export function createSeason(
+  calendar: SeasonRound[] = defaultCalendar(),
+  objectivesEnabled: boolean = true,
+  carryForwardDevelopment?: Record<string, TeamDevelopment>
+): SeasonState {
   return {
     calendar,
     roundIndex: 0,
     driverPoints: Object.fromEntries(drivers.map((d) => [d.id, 0])),
     results: [],
-    teamDevelopment: createInitialDevelopment(teams.map((t) => t.id)),
+    teamDevelopment: carryForwardDevelopment ?? createInitialDevelopment(teams.map((t) => t.id)),
+    currentObjective: objectivesEnabled ? generateObjective() : null,
   };
 }
 
@@ -79,9 +97,14 @@ export function currentRoundTrack(season: SeasonState): Track | null {
  * team (summed across both its drivers — a shared team budget, not a per-driver one),
  * lets every AI-controlled team auto-invest its new budget, and advances to the next round.
  * The player's own team is excluded from auto-spend — they manage it themselves via the
- * Team Development screen, using whatever budget accumulates here.
+ * Team Development screen, using whatever budget accumulates here (plus a bonus on top if
+ * they achieved the round's objective — see objectives.ts).
  */
-export function completeRound(season: SeasonState, standings: StandingsRow[]): SeasonState {
+export function completeRound(
+  season: SeasonState,
+  standings: StandingsRow[],
+  objectivesEnabled: boolean = true
+): SeasonState {
   const round = currentRound(season);
   if (!round) return season;
 
@@ -96,12 +119,19 @@ export function completeRound(season: SeasonState, standings: StandingsRow[]): S
     driverPoints[entry.driverId] = (driverPoints[entry.driverId] ?? 0) + entry.points;
   }
 
+  const playerTeamId = standings.find((row) => row.car.isPlayer)?.car.team.id;
+  const objectiveAchieved =
+    objectivesEnabled && season.currentObjective ? evaluateObjective(season.currentObjective, standings) : false;
+  const objectiveBonus = objectiveAchieved ? season.currentObjective!.rewardCredits : 0;
+
   const prizeByTeam = new Map<string, number>();
   for (const row of standings) {
     const prize = row.car.retired ? 0 : prizeForPosition(row.position);
     prizeByTeam.set(row.car.team.id, (prizeByTeam.get(row.car.team.id) ?? 0) + prize);
   }
-  const playerTeamId = standings.find((row) => row.car.isPlayer)?.car.team.id;
+  if (playerTeamId && objectiveBonus > 0) {
+    prizeByTeam.set(playerTeamId, (prizeByTeam.get(playerTeamId) ?? 0) + objectiveBonus);
+  }
 
   const teamDevelopment = { ...season.teamDevelopment };
   for (const [teamId, prize] of prizeByTeam) {
@@ -122,6 +152,7 @@ export function completeRound(season: SeasonState, standings: StandingsRow[]): S
     driverPoints,
     results: [...season.results, result],
     teamDevelopment,
+    currentObjective: objectivesEnabled ? generateObjective() : null,
   };
 }
 

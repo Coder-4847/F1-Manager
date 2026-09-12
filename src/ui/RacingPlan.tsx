@@ -4,6 +4,7 @@ import type { InitialStrategy } from "../sim/strategy";
 import { generateWeatherForecast } from "../sim/weather";
 import { FUEL_LOADS, FUEL_LOAD_LABEL } from "../sim/fuel";
 import { DOWNFORCE_SETTINGS, DOWNFORCE_LABEL } from "../sim/downforce";
+import type { Objective } from "../sim/objectives";
 import { WeatherForecast } from "./WeatherForecast";
 
 const COMPOUNDS: TireCompound[] = ["soft", "medium", "hard", "intermediate", "wet"];
@@ -35,6 +36,8 @@ export interface RacingPlanProps {
   /** Which way this track's character leans — shown as a plain-language hint next to the
    *  downforce picker, computed by the caller from the actual Track (recommendedDownforceFor). */
   downforceHint: DownforceSetting;
+  /** null when the Race Objectives setting is off. */
+  objective: Objective | null;
 }
 
 export function RacingPlan({
@@ -49,6 +52,7 @@ export function RacingPlan({
   fuelStrategyEnabled,
   setupTradeoffEnabled,
   downforceHint,
+  objective,
 }: RacingPlanProps) {
   const [compound, setCompound] = useState<TireCompound>(initialPlan.startingCompound);
   const [mode, setMode] = useState<DrivingMode>(initialPlan.drivingMode);
@@ -105,6 +109,13 @@ export function RacingPlan({
           {trackName} &middot; {totalLaps} laps
           {startingGridPosition && <> &middot; Qualified P{startingGridPosition}</>}
         </p>
+
+        {objective && (
+          <div className="racing-plan__objective">
+            🎯 Objective: {objective.description}{" "}
+            <span className="racing-plan__objective-reward">+{objective.rewardCredits} credits</span>
+          </div>
+        )}
 
         <div className="racing-plan__field-label">Weather Forecast</div>
         <WeatherForecast forecast={forecast} startLap={1} />
