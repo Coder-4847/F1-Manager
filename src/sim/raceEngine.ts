@@ -18,6 +18,8 @@ import {
 } from "./caution";
 import { paceBonusForLevel, reliabilityMultiplierForLevel, tireWearMultiplierForLevel } from "./development";
 import type { TeamDevelopment } from "./development";
+import { AI_SPEED_MULTIPLIER } from "./difficulty";
+import type { Difficulty } from "./difficulty";
 import { drivers, getTeam } from "./roster";
 
 export interface RaceSetup {
@@ -28,6 +30,8 @@ export interface RaceSetup {
   /** This season's per-team development (pace/reliability/tire management + budget), keyed
    *  by team id. Omitted entirely (e.g. a standalone test setup) means no team has upgrades. */
   teamDevelopment?: Record<string, TeamDevelopment>;
+  /** Defaults to "normal" (no AI pace change) when omitted, e.g. a standalone test setup. */
+  difficulty?: Difficulty;
   random?: () => number;
 }
 
@@ -100,6 +104,7 @@ export function setupRace(setup: RaceSetup): RaceState {
     events: [],
     weather: "dry",
     caution: null,
+    difficulty: setup.difficulty ?? "normal",
   };
 }
 
@@ -242,7 +247,10 @@ export function simulateLap(state: RaceState, random: () => number = Math.random
       car.pitPlan[0]?.lap === state.currentLap ? car.pitPlan.shift() : undefined;
 
     const lapTimeMultiplier = activeCaution ? cautionLapTimeMultiplier(activeCaution.type) : 1;
-    const rawLapTime = calculateLapTime(car, state.track, state.weather, random) * lapTimeMultiplier;
+    // Difficulty scales AI pace only — a speed multiplier above 1 means faster, so it
+    // divides into lap time rather than multiplying. The player is never affected.
+    const difficultyMultiplier = car.isPlayer ? 1 : 1 / AI_SPEED_MULTIPLIER[state.difficulty];
+    const rawLapTime = calculateLapTime(car, state.track, state.weather, random) * lapTimeMultiplier * difficultyMultiplier;
     const repaired = Boolean(duePitStop && car.pendingRepairSeconds !== undefined);
     const pitLossMultiplier = activeCaution ? cautionPitLossMultiplier(activeCaution.type) : 1;
     const pitLoss = duePitStop

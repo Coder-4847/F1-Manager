@@ -1,10 +1,10 @@
 import type { RaceState } from "../sim/types";
 import type { SeasonState } from "../sim/season";
 
-// Bumped to v7: CarState gained reliabilityMultiplier/tireWearMultiplier and SeasonState
-// gained teamDevelopment (all required — an old save's missing fields would propagate
-// undefined/NaN through lap-time and roll-chance math).
-const SAVE_KEY = "f1-manager-save-v7";
+// Bumped to v8: RaceState gained the required difficulty field — an old save's missing
+// field would be undefined, and AI_SPEED_MULTIPLIER[undefined] is NaN, breaking every AI
+// car's lap time.
+const SAVE_KEY = "f1-manager-save-v8";
 
 export interface SeasonSave {
   season: SeasonState;

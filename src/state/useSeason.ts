@@ -12,15 +12,20 @@ import {
 import type { SeasonRound, SeasonState } from "../sim/season";
 import type { InitialStrategy } from "../sim/strategy";
 import type { UpgradeCategory } from "../sim/development";
+import type { Difficulty } from "../sim/difficulty";
 import { getDriver } from "../sim/roster";
 import { hasSeasonSave, loadSeasonProgress, saveSeasonProgress } from "./persistence";
 
 export interface UseSeasonOptions {
   playerDriverId: string;
   playerStrategy: InitialStrategy;
+  /** Read fresh (not just at mount) so a difficulty change in the menu takes effect on the
+   *  next race that gets set up (restart, next round, custom season) without needing a
+   *  full app reload. */
+  difficulty: Difficulty;
 }
 
-export function useSeason({ playerDriverId, playerStrategy }: UseSeasonOptions) {
+export function useSeason({ playerDriverId, playerStrategy, difficulty }: UseSeasonOptions) {
   const [season, setSeason] = useState<SeasonState>(() => createSeason());
   const playerTeamId = getDriver(playerDriverId).teamId;
 
@@ -33,6 +38,7 @@ export function useSeason({ playerDriverId, playerStrategy }: UseSeasonOptions) 
     playerDriverId,
     playerStrategy,
     initialTeamDevelopment: season.teamDevelopment,
+    initialDifficulty: difficulty,
   });
 
   const seasonComplete = isSeasonComplete(season);
@@ -42,24 +48,24 @@ export function useSeason({ playerDriverId, playerStrategy }: UseSeasonOptions) 
     const updated = completeRound(season, race.standings);
     setSeason(updated);
     const nextTrack = currentRoundTrack(updated);
-    if (nextTrack) race.switchTrack(nextTrack, updated.teamDevelopment);
-  }, [race, season, seasonComplete]);
+    if (nextTrack) race.switchTrack(nextTrack, updated.teamDevelopment, difficulty);
+  }, [race, season, seasonComplete, difficulty]);
 
   // Restarts using the *current* calendar (default or custom) — a season built
   // via startCustomSeason stays the same shape when restarted, not the default 12.
   const restartSeason = useCallback(() => {
     const fresh = createSeason(season.calendar);
     setSeason(fresh);
-    race.switchTrack(currentRoundTrack(fresh)!, fresh.teamDevelopment);
-  }, [race, season.calendar]);
+    race.switchTrack(currentRoundTrack(fresh)!, fresh.teamDevelopment, difficulty);
+  }, [race, season.calendar, difficulty]);
 
   const startCustomSeason = useCallback(
     (calendar: SeasonRound[]) => {
       const fresh = createSeason(calendar);
       setSeason(fresh);
-      race.switchTrack(currentRoundTrack(fresh)!, fresh.teamDevelopment);
+      race.switchTrack(currentRoundTrack(fresh)!, fresh.teamDevelopment, difficulty);
     },
-    [race]
+    [race, difficulty]
   );
 
   /** Buys one level of a development category for the player's own team. */

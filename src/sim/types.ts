@@ -1,6 +1,8 @@
 // Core domain types for the race simulation engine.
 // This module has zero React/UI dependencies so it can be tested and reused in isolation.
 
+import type { Difficulty } from "./difficulty";
+
 export type TireCompound = "soft" | "medium" | "hard" | "intermediate" | "wet";
 
 export type DrivingMode = "push" | "balanced" | "conserve";
@@ -149,4 +151,8 @@ export interface RaceState {
   weather: WeatherCondition;
   /** Active Safety Car / VSC period, or null when racing is green. */
   caution: CautionPeriod | null;
+  /** Chosen from the main menu before the race was set up; fixed for the rest of this race
+   *  even if the setting is changed mid-season. Scales AI (never player) pace — see
+   *  AI_SPEED_MULTIPLIER in difficulty.ts. */
+  difficulty: Difficulty;
 }

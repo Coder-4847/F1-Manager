@@ -6,6 +6,8 @@ import { getFinalResults } from "./sim/raceEngine";
 import { generateWeatherForecast } from "./sim/weather";
 import { useSeason } from "./state/useSeason";
 import { applyStoredDriverProfile, saveDriverProfile } from "./state/driverProfile";
+import { loadDifficulty, saveDifficulty } from "./state/difficulty";
+import type { Difficulty } from "./sim/difficulty";
 import { Leaderboard } from "./ui/Leaderboard";
 import { EventFeed } from "./ui/EventFeed";
 import { PlayerControls } from "./ui/PlayerControls";
@@ -44,6 +46,8 @@ const PLAYER_STRATEGY: InitialStrategy = {
 applyStoredDriverProfile(PLAYER_DRIVER_ID);
 
 function App() {
+  const [difficulty, setDifficultyState] = useState<Difficulty>(() => loadDifficulty());
+
   const {
     season,
     race,
@@ -58,7 +62,7 @@ function App() {
     hasSave,
     saveProgress,
     loadProgress,
-  } = useSeason({ playerDriverId: PLAYER_DRIVER_ID, playerStrategy: PLAYER_STRATEGY });
+  } = useSeason({ playerDriverId: PLAYER_DRIVER_ID, playerStrategy: PLAYER_STRATEGY, difficulty });
 
   const {
     raceState,
@@ -144,6 +148,11 @@ function App() {
     setShowMenu(false);
   };
 
+  const handleSetDifficulty = (next: Difficulty) => {
+    setDifficultyState(next);
+    saveDifficulty(next);
+  };
+
   if (showMenu) {
     return (
       <>
@@ -153,11 +162,13 @@ function App() {
           totalRounds={season.calendar.length}
           seasonComplete={seasonComplete}
           hasSave={hasSave}
+          difficulty={difficulty}
           onPlay={() => setShowMenu(false)}
           onCustomSeason={() => setShowSeasonSetup(true)}
           onEditDriver={() => setShowProfileEditor(true)}
           onTeamDevelopment={() => setShowTeamDevelopment(true)}
           onLoad={handleLoadFromMenu}
+          onSetDifficulty={handleSetDifficulty}
         />
 
         {showProfileEditor && (
@@ -315,7 +326,7 @@ function App() {
         onPlay={play}
         onPause={pause}
         onStep={step}
-        onReset={() => reset(season.teamDevelopment)}
+        onReset={() => reset(season.teamDevelopment, difficulty)}
         onSetSpeed={setSpeed}
         onSave={saveProgress}
         onLoad={loadProgress}
